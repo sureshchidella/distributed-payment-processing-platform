@@ -1,0 +1,2042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distributed Payment Simulator — Build Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #080b10;
+  --surface:   #0d1117;
+  --surface2:  #111820;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.12);
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --dim:       #334155;
+
+  --kafka:     #f97316;
+  --axon:      #3b82f6;
+  --spring:    #22c55e;
+  --event:     #a855f7;
+  --saga:      #ec4899;
+  --outbox:    #14b8a6;
+  --query:     #eab308;
+  --risk:      #ef4444;
+  --build:     #06b6d4;
+
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+  --display: 'Space Grotesk', sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content:'';
+  position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+  background-size: 40px 40px;
+  pointer-events:none;z-index:0;
+}
+
+.glow-1 {
+  position:fixed;top:-200px;right:-200px;
+  width:600px;height:600px;border-radius:50%;
+  background:radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%);
+  pointer-events:none;z-index:0;
+}
+.glow-2 {
+  position:fixed;bottom:-200px;left:-200px;
+  width:500px;height:500px;border-radius:50%;
+  background:radial-gradient(circle,rgba(168,85,247,.06) 0%,transparent 70%);
+  pointer-events:none;z-index:0;
+}
+
+.wrap {
+  position:relative;z-index:1;
+  max-width:1140px;margin:0 auto;padding:0 24px;
+}
+
+/* ── Hero ── */
+.hero {
+  padding:72px 0 48px;
+  border-bottom:1px solid var(--border);
+}
+.hero-tag {
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--build);margin-bottom:20px;
+  display:flex;align-items:center;gap:8px;
+}
+.hero-tag::before {
+  content:'';display:inline-block;width:24px;height:1px;background:var(--build);
+}
+.hero h1 {
+  font-family:var(--display);font-size:clamp(32px,5vw,54px);font-weight:700;
+  line-height:1.1;margin-bottom:16px;
+  background:linear-gradient(135deg,#e2e8f0 0%,#94a3b8 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-sub {
+  font-size:16px;color:var(--muted);max-width:680px;line-height:1.7;margin-bottom:32px;
+}
+.tech-stack {
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+.tech-pill {
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.5px;
+  padding:4px 12px;border-radius:4px;border:1px solid;
+}
+.tp-kafka  {border-color:rgba(249,115,22,.4);color:var(--kafka);background:rgba(249,115,22,.07);}
+.tp-axon   {border-color:rgba(59,130,246,.4);color:var(--axon);background:rgba(59,130,246,.07);}
+.tp-spring {border-color:rgba(34,197,94,.4);color:var(--spring);background:rgba(34,197,94,.07);}
+.tp-pg     {border-color:rgba(99,102,241,.4);color:#818cf8;background:rgba(99,102,241,.07);}
+.tp-java   {border-color:rgba(234,179,8,.4);color:var(--query);background:rgba(234,179,8,.07);}
+.tp-docker {border-color:rgba(20,184,166,.4);color:var(--outbox);background:rgba(20,184,166,.07);}
+
+/* ── Section titles ── */
+.section {padding:56px 0;}
+.section-label {
+  font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:3px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:8px;
+}
+.section-title {
+  font-family:var(--display);font-size:24px;font-weight:700;
+  color:var(--text);margin-bottom:6px;
+}
+.section-desc {
+  font-size:13.5px;color:var(--muted);max-width:700px;line-height:1.7;margin-bottom:36px;
+}
+
+.divider {height:1px;background:var(--border);margin:0;}
+
+/* ── Core Idea ── */
+.idea-grid {
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;
+}
+@media(max-width:680px){.idea-grid{grid-template-columns:1fr;}}
+
+.idea-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:20px 22px;
+  transition:border-color .2s;
+}
+.idea-card:hover{border-color:var(--border2);}
+.idea-card-icon {
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.idea-card-icon .dot {
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+}
+.idea-card h3 {
+  font-family:var(--sans);font-size:14px;font-weight:600;margin-bottom:6px;color:var(--text);
+}
+.idea-card p {font-size:12.5px;color:var(--muted);line-height:1.65;}
+
+/* ── Architecture flow ── */
+.arch-flow {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+}
+.arch-flow-header {
+  background:var(--surface2);border-bottom:1px solid var(--border);
+  padding:12px 20px;font-family:var(--mono);font-size:10px;
+  color:var(--muted);letter-spacing:1px;display:flex;align-items:center;gap:8px;
+}
+.arch-flow-header::before {content:'●';color:var(--risk);font-size:8px;}
+.arch-flow-inner {padding:28px 24px;}
+
+/* Flow diagram */
+.flow-box {
+  flex-shrink:0;border:1px solid;border-radius:8px;
+  padding:10px 14px;font-family:var(--mono);font-size:10.5px;font-weight:600;
+  text-align:center;min-width:120px;position:relative;
+  transition:transform .15s;cursor:default;
+}
+.flow-box:hover{transform:translateY(-2px);}
+.flow-arrow {
+  flex:1;height:1px;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  min-width:24px;
+}
+.flow-arrow::before {
+  content:'';position:absolute;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--dim),transparent);
+}
+.flow-arrow::after {
+  content:'›';font-size:16px;color:var(--dim);
+  position:relative;z-index:1;
+}
+
+.fb-client  {border-color:rgba(99,102,241,.5);color:#818cf8;background:rgba(99,102,241,.07);}
+.fb-gateway {border-color:rgba(34,197,94,.5);color:var(--spring);background:rgba(34,197,94,.07);}
+.fb-kafka   {border-color:rgba(249,115,22,.5);color:var(--kafka);background:rgba(249,115,22,.07);}
+.fb-payment {border-color:rgba(59,130,246,.5);color:var(--axon);background:rgba(59,130,246,.07);}
+.fb-account {border-color:rgba(168,85,247,.5);color:var(--event);background:rgba(168,85,247,.07);}
+.fb-risk    {border-color:rgba(239,68,68,.5);color:var(--risk);background:rgba(239,68,68,.07);}
+.fb-notif   {border-color:rgba(20,184,166,.5);color:var(--outbox);background:rgba(20,184,166,.07);}
+.fb-query   {border-color:rgba(234,179,8,.5);color:var(--query);background:rgba(234,179,8,.07);}
+.fb-db      {border-color:rgba(100,116,139,.5);color:#94a3b8;background:rgba(100,116,139,.07);}
+
+.kafka-bus {
+  width:100%;border:1px dashed rgba(249,115,22,.4);border-radius:8px;
+  padding:10px 20px;text-align:center;color:var(--kafka);
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;
+  background:rgba(249,115,22,.04);margin:16px 0;position:relative;
+}
+.kafka-bus-label {
+  font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:2px;
+}
+.consumers-row {
+  display:flex;justify-content:space-around;width:100%;flex-wrap:wrap;gap:12px;
+}
+.consumer-col {
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  flex:1;min-width:100px;
+}
+.consumer-label {
+  font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;
+}
+.arrow-up {
+  font-size:14px;color:var(--dim);line-height:1;
+}
+
+/* ── Services grid ── */
+.services-grid {
+  display:grid;grid-template-columns:1fr;gap:24px;
+}
+.svc-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  transition:border-color .2s,transform .15s;
+}
+.svc-card:hover{border-color:var(--border2);}
+.svc-header {
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;gap:14px;
+}
+.svc-num {
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  color:var(--muted);flex-shrink:0;padding-top:3px;
+}
+.svc-name {
+  font-family:var(--sans);font-size:15px;font-weight:600;color:var(--text);
+  margin-bottom:2px;
+}
+.svc-role {
+  font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.5px;
+}
+.svc-accent {
+  margin-left:auto;flex-shrink:0;width:8px;height:8px;border-radius:50%;margin-top:4px;
+}
+.svc-body {padding:18px 20px;}
+.svc-desc {
+  font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:14px;
+}
+.svc-section-hdr {
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--dim);margin-bottom:8px;margin-top:14px;
+}
+.svc-items {list-style:none;display:flex;flex-direction:column;gap:5px;}
+.svc-items li {
+  font-size:12px;color:var(--muted);padding-left:14px;position:relative;line-height:1.5;
+}
+.svc-items li::before {
+  content:'→';position:absolute;left:0;
+  font-family:var(--mono);font-size:10px;
+}
+.svc-tags {display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;}
+.svc-tag {
+  font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;
+  padding:3px 8px;border-radius:4px;border:1px solid;
+}
+
+/* ── Code blocks ── */
+.code-block {
+  margin-top:10px;background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;padding:12px 14px;
+  font-family:var(--mono);font-size:10.5px;color:#94a3b8;line-height:1.7;
+  overflow-x:auto;white-space:pre;
+}
+.code-block .kw{color:var(--axon);}
+.code-block .ev{color:var(--event);}
+.code-block .cm{color:var(--dim);}
+.code-block .st{color:var(--spring);}
+.code-block .tp{color:var(--kafka);}
+.code-block .hl{color:var(--query);}
+.code-block .pk{color:var(--build);}
+
+/* ── Implementation detail grid ── */
+.impl-grid {
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;
+}
+@media(max-width:750px){.impl-grid{grid-template-columns:1fr;}}
+.impl-box {
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;
+}
+.impl-box-title {
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px;
+}
+.impl-box-title .dot {width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+
+/* ── Build order ── */
+.build-steps {
+  display:flex;flex-direction:column;gap:14px;
+}
+.build-step {
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:18px 20px;display:flex;gap:16px;align-items:flex-start;
+  transition:border-color .2s;
+}
+.build-step:hover{border-color:var(--border2);}
+.build-step-num {
+  font-family:var(--mono);font-size:24px;font-weight:700;
+  flex-shrink:0;width:40px;text-align:center;line-height:1;padding-top:2px;
+}
+.build-step-body {flex:1;}
+.build-step-title {
+  font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;
+}
+.build-step-desc {
+  font-size:12px;color:var(--muted);line-height:1.6;
+}
+.build-dep {
+  margin-top:6px;font-family:var(--mono);font-size:9px;
+  padding:3px 8px;border-radius:4px;border:1px solid;display:inline-block;
+}
+
+/* ── Patterns section ── */
+.patterns-grid {
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;
+}
+.pat-card {
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:20px;transition:border-color .2s;
+}
+.pat-card:hover{border-color:var(--border2);}
+.pat-name {
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.pat-dot {width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.pat-desc {font-size:12px;color:var(--muted);line-height:1.6;}
+
+/* ── Happy path / failure path ── */
+.path-grid {
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;
+}
+@media(max-width:680px){.path-grid{grid-template-columns:1fr;}}
+
+.path-card {
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;
+}
+.path-header {
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;display:flex;align-items:center;gap:8px;
+}
+.path-header .ph-dot{width:8px;height:8px;border-radius:50%;}
+.path-steps {padding:16px;list-style:none;display:flex;flex-direction:column;gap:0;}
+.path-step {
+  display:flex;gap:12px;padding:8px 0;
+  border-bottom:1px solid rgba(255,255,255,.03);
+  font-size:12px;color:var(--muted);align-items:flex-start;
+}
+.path-step:last-child{border-bottom:none;}
+.path-step-n {
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+.ps-happy .path-step-n{background:rgba(34,197,94,.12);color:var(--spring);border:1px solid rgba(34,197,94,.25);}
+.ps-fail  .path-step-n{background:rgba(239,68,68,.12);color:var(--risk);border:1px solid rgba(239,68,68,.25);}
+.path-event {
+  font-family:var(--mono);font-size:9px;font-weight:600;
+  padding:1px 6px;border-radius:3px;margin-left:auto;flex-shrink:0;margin-top:1px;
+}
+.pe-happy{background:rgba(34,197,94,.1);color:var(--spring);border:1px solid rgba(34,197,94,.2);}
+.pe-fail {background:rgba(239,68,68,.1);color:var(--risk);border:1px solid rgba(239,68,68,.2);}
+
+/* ── Config table ── */
+.config-table {
+  width:100%;border-collapse:collapse;font-size:12px;
+}
+.config-table th {
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--muted);padding:10px 16px;
+  border-bottom:1px solid var(--border2);text-align:left;background:var(--surface2);
+}
+.config-table td {
+  padding:10px 16px;border-bottom:1px solid var(--border);
+  color:var(--muted);vertical-align:top;
+}
+.config-table td:first-child {
+  font-family:var(--mono);font-size:10.5px;color:#818cf8;font-weight:600;
+}
+.config-table td:nth-child(2){color:var(--spring);}
+.config-table tr:last-child td{border-bottom:none;}
+.config-wrap {
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;
+}
+
+/* ── Checklist ── */
+.checklist {list-style:none;display:flex;flex-direction:column;gap:3px;margin-top:10px;}
+.checklist li {
+  font-size:11.5px;color:var(--muted);padding:5px 0 5px 22px;position:relative;line-height:1.55;
+  border-bottom:1px solid rgba(255,255,255,.025);
+}
+.checklist li:last-child{border-bottom:none;}
+.checklist li::before {
+  content:'☐';position:absolute;left:0;top:5px;
+  font-size:12px;color:var(--dim);
+}
+
+/* ── Alert boxes ── */
+.alert-box {
+  padding:14px 18px;border-radius:8px;font-size:12px;line-height:1.7;
+  margin:14px 0;border-left:3px solid;
+}
+.alert-warn {background:rgba(234,179,8,.06);border-color:var(--query);border:1px solid rgba(234,179,8,.2);border-left:3px solid var(--query);}
+.alert-warn strong{color:var(--query);}
+.alert-info {background:rgba(59,130,246,.06);border-color:var(--axon);border:1px solid rgba(59,130,246,.2);border-left:3px solid var(--axon);}
+.alert-info strong{color:var(--axon);}
+.alert-danger {background:rgba(239,68,68,.06);border-color:var(--risk);border:1px solid rgba(239,68,68,.2);border-left:3px solid var(--risk);}
+.alert-danger strong{color:var(--risk);}
+.alert-success {background:rgba(34,197,94,.06);border-color:var(--spring);border:1px solid rgba(34,197,94,.2);border-left:3px solid var(--spring);}
+.alert-success strong{color:var(--spring);}
+
+/* ── Footer ── */
+.footer {
+  padding:32px 0;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+}
+.footer-left{font-family:var(--mono);font-size:10px;color:var(--dim);}
+.footer-right{display:flex;gap:12px;}
+.footer-badge {
+  font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:1px;
+  padding:4px 10px;border-radius:4px;border:1px solid var(--border);color:var(--muted);
+}
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from{opacity:0;transform:translateY(18px);}
+  to{opacity:1;transform:translateY(0);}
+}
+.fade-up{animation:fadeUp .5s ease both;}
+.delay-1{animation-delay:.1s;}
+.delay-2{animation-delay:.2s;}
+.delay-3{animation-delay:.3s;}
+
+/* ── Nav ── */
+nav {
+  position:sticky;top:0;z-index:100;
+  background:rgba(8,11,16,.85);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.nav-inner {
+  display:flex;align-items:center;gap:0;height:48px;overflow-x:auto;
+}
+.nav-link {
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:1px;
+  text-transform:uppercase;color:var(--muted);padding:0 16px;height:100%;
+  display:flex;align-items:center;text-decoration:none;border-bottom:2px solid transparent;
+  white-space:nowrap;transition:color .15s,border-color .15s;flex-shrink:0;
+}
+.nav-link:hover{color:var(--text);border-bottom-color:var(--border2);}
+
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div class="glow-1"></div>
+<div class="glow-2"></div>
+
+<nav>
+  <div class="wrap">
+    <div class="nav-inner">
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#build-order">Build Order</a>
+      <a class="nav-link" href="#architecture">Architecture</a>
+      <a class="nav-link" href="#common">Common Service</a>
+      <a class="nav-link" href="#services">Services</a>
+      <a class="nav-link" href="#patterns">Patterns</a>
+      <a class="nav-link" href="#flows">Flows</a>
+      <a class="nav-link" href="#config">Config</a>
+      <a class="nav-link" href="#testing">Testing</a>
+      <a class="nav-link" href="#docker">Docker</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ HERO ═══ -->
+<div class="wrap">
+  <section class="hero fade-up">
+    <div class="hero-tag">Build Guide · Implementation Reference · Personal Use Only</div>
+    <h1>Distributed Payment<br>Simulator</h1>
+    <p class="hero-sub">
+      Complete implementation reference for building the event-driven payment processing platform from scratch.
+      Covers every service, every class, every table, and the exact order to build it all.
+      Based on patterns from your Mastercard and Axis Bank production systems.
+    </p>
+    <div class="tech-stack">
+      <span class="tech-pill tp-java">Java 17</span>
+      <span class="tech-pill tp-spring">Spring Boot 3</span>
+      <span class="tech-pill tp-kafka">Apache Kafka</span>
+      <span class="tech-pill tp-axon">Axon Framework</span>
+      <span class="tech-pill tp-pg">PostgreSQL</span>
+      <span class="tech-pill tp-docker">Docker Compose</span>
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ OVERVIEW ═══ -->
+<div class="wrap" id="overview">
+  <section class="section fade-up delay-1">
+    <div class="section-label">01 — What You're Building</div>
+    <div class="section-title">Core Idea</div>
+    <div class="section-desc">
+      An event-driven microservices system that simulates the full lifecycle of a payment transaction — from initiation through risk screening, account debit, ledger posting, and notification — using patterns drawn from your Mastercard and Axis Bank production systems. Every inter-service call goes through Kafka. No direct REST between internal services.
+    </div>
+
+    <div class="idea-grid">
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--axon)">
+          <span class="dot" style="background:var(--axon)"></span>
+          Command Side
+        </div>
+        <h3>Write Model (CQRS)</h3>
+        <p>All mutations go through commands handled by Axon aggregates. The aggregate enforces business invariants, emits domain events, and never reads its own query model. You'll implement this in <code>payment-service</code> using <code>@CommandHandler</code> and <code>@EventSourcingHandler</code> annotations.</p>
+      </div>
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--query)">
+          <span class="dot" style="background:var(--query)"></span>
+          Query Side
+        </div>
+        <h3>Read Model (Projections)</h3>
+        <p>Event handlers maintain denormalized read tables in PostgreSQL. The query service reads these — zero joins, sub-millisecond reads, completely decoupled from write throughput. You'll implement this in <code>query-service</code> as a separate Spring Boot app with its own database.</p>
+      </div>
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--kafka)">
+          <span class="dot" style="background:var(--kafka)"></span>
+          Event Bus
+        </div>
+        <h3>Kafka as the Backbone</h3>
+        <p>All inter-service communication flows through Kafka topics. Services are consumers and producers. No direct REST calls between internal services after the gateway. You already did this at Mastercard — this is the same pattern, your own implementation.</p>
+      </div>
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--saga)">
+          <span class="dot" style="background:var(--saga)"></span>
+          Failure Handling
+        </div>
+        <h3>Sagas + Compensating Transactions</h3>
+        <p>Distributed transactions are managed by Axon Sagas. If any step fails — risk rejection, insufficient funds, timeout — compensating commands undo the in-progress steps. This is the same pattern as your Axis Bank builder loan lifecycle stages.</p>
+      </div>
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--outbox)">
+          <span class="dot" style="background:var(--outbox)"></span>
+          Reliability
+        </div>
+        <h3>Outbox Pattern</h3>
+        <p>The Payment Service writes to its own DB and an outbox table in a single ACID transaction. A relay process polls and publishes to Kafka — eliminating dual-write failure risk. You need to implement: <code>outbox_events</code> table, a <code>@Scheduled</code> poller, and Kafka ACK tracking.</p>
+      </div>
+      <div class="idea-card">
+        <div class="idea-card-icon" style="color:var(--risk)">
+          <span class="dot" style="background:var(--risk)"></span>
+          Idempotency
+        </div>
+        <h3>Exactly-Once Guarantees</h3>
+        <p>Kafka producers use idempotent mode + transactional IDs. Consumers track processed event IDs in PostgreSQL. Duplicate events are detected and silently discarded. Implement a <code>processed_events</code> table in every consumer service.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ BUILD ORDER ═══ -->
+<div class="wrap" id="build-order">
+  <section class="section">
+    <div class="section-label">02 — Build Order</div>
+    <div class="section-title">What To Build First</div>
+    <div class="section-desc">
+      Don't build everything in parallel. Follow this exact sequence — each step depends on the previous one being done. The common-service and Docker Compose go first because everything else depends on them.
+    </div>
+
+    <div class="alert-box alert-warn">
+      <strong>Rule:</strong> Don't skip ahead. Each step assumes the previous one is working and tested locally. Push to GitHub after each step. Your repo should always have a working <code>main</code> branch.
+    </div>
+
+    <div class="build-steps">
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--build)">01</div>
+        <div class="build-step-body">
+          <div class="build-step-title">Docker Compose + Infrastructure</div>
+          <div class="build-step-desc">Set up the local infrastructure: Kafka (with Zookeeper), Axon Server, and three PostgreSQL instances (<code>payment_db:5432</code>, <code>account_db:5433</code>, <code>query_db:5434</code>). Verify all containers start with <code>docker compose up -d</code> and you can connect to each DB. Create a <code>docker-compose.yml</code> at the project root.</div>
+          <span class="build-dep" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">NO DEPENDENCIES</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--build)">02</div>
+        <div class="build-step-body">
+          <div class="build-step-title">common-service — Shared DTOs, Commands, Events</div>
+          <div class="build-step-desc">This is a non-runnable Maven module. Contains all shared classes: commands (<code>CreatePaymentCommand</code>, <code>ConfirmPaymentCommand</code>, <code>CancelPaymentCommand</code>), events (<code>PaymentInitiatedEvent</code>, <code>AccountDebitedEvent</code>, etc.), DTOs (<code>Sender</code>, <code>Recipient</code>, <code>Address</code>), and the <code>Transaction</code> entity. Every other module depends on this. <strong>You already have this partially built.</strong></div>
+          <span class="build-dep" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">DEPENDS ON: Docker Compose running</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--spring)">03</div>
+        <div class="build-step-body">
+          <div class="build-step-title">api-gateway — REST Entry Point</div>
+          <div class="build-step-desc">Your current gateway handles REST + validation + idempotency cache. <strong>Next step:</strong> Wire it to send <code>CreatePaymentCommand</code> to Axon's <code>CommandGateway</code> instead of just returning an empty response. The gateway should return <code>202 Accepted</code> with a payment ID. Add the <code>Repeat-Flag</code> / idempotency-key logic to actually return cached responses.</div>
+          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Axon Server running</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--axon)">04</div>
+        <div class="build-step-body">
+          <div class="build-step-title">payment-service — Axon Aggregate + CQRS + Outbox</div>
+          <div class="build-step-desc">The core write model. Implement <code>PaymentAggregate</code> with <code>@CommandHandler</code> for Create/Confirm/Cancel commands and <code>@EventSourcingHandler</code> for state mutation. Then implement the Outbox pattern: <code>outbox_events</code> table, <code>OutboxEntity</code>, <code>OutboxRepository</code>, a <code>@Scheduled</code> poller that reads unpublished rows and sends them to Kafka, then marks them published after ACK. <strong>This is the hardest service. Get it right.</strong></div>
+          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Axon Server, Kafka, PostgreSQL (payment_db)</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--risk)">05</div>
+        <div class="build-step-body">
+          <div class="build-step-title">risk-service — Fraud Rule Engine</div>
+          <div class="build-step-desc">Kafka consumer that listens to <code>payment.events</code> topic. Runs configurable fraud rules against each payment. Publishes <code>RiskApprovedEvent</code> or <code>RiskRejectedEvent</code>. Simplest consumer service — good for validating your Kafka pipeline works end-to-end.</div>
+          <span class="build-dep" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">DEPENDS ON: common-service, Kafka, payment-service publishing events</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--event)">06</div>
+        <div class="build-step-body">
+          <div class="build-step-title">account-service — Balance Management</div>
+          <div class="build-step-desc">Kafka consumer that debits/credits accounts. Needs its own PostgreSQL (<code>account_db</code>). Must implement optimistic locking on balance updates and idempotent event processing. Publishes <code>AccountDebitedEvent</code> or <code>AccountDebitFailedEvent</code>.</div>
+          <span class="build-dep" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">DEPENDS ON: common-service, Kafka, PostgreSQL (account_db)</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--saga)">07</div>
+        <div class="build-step-body">
+          <div class="build-step-title">payment-saga-service — Saga Orchestrator</div>
+          <div class="build-step-desc">Axon Saga that listens for events from risk-service and account-service. If both succeed → sends <code>ConfirmPaymentCommand</code>. If either fails → sends <code>CancelPaymentCommand</code>. This is where compensating transactions happen. Use <code>@SagaEventHandler</code> and <code>@StartSaga</code> / <code>@EndSaga</code> annotations.</div>
+          <span class="build-dep" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">DEPENDS ON: common-service, Axon Server, risk-service + account-service publishing events</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--query)">08</div>
+        <div class="build-step-body">
+          <div class="build-step-title">query-service — Read Model + Projections</div>
+          <div class="build-step-desc">Kafka consumer that maintains denormalized projection tables (<code>payment_summary</code>, <code>account_balance_view</code>, <code>payment_audit_log</code>) in its own PostgreSQL (<code>query_db</code>). Exposes REST endpoints for status polling. This is the CQRS read side.</div>
+          <span class="build-dep" style="color:var(--query);border-color:rgba(234,179,8,.3);background:rgba(234,179,8,.06)">DEPENDS ON: common-service, Kafka, PostgreSQL (query_db), all events flowing</span>
+        </div>
+      </div>
+
+      <div class="build-step">
+        <div class="build-step-num" style="color:var(--outbox)">09</div>
+        <div class="build-step-body">
+          <div class="build-step-title">notification-service — Webhooks + DLT</div>
+          <div class="build-step-desc">Final consumer. Listens to all terminal events. Fires webhook stubs (just log for now). Implements retry with exponential backoff and Dead Letter Topic routing. Lowest priority — build last. Separate consumer group so it never blocks the payment flow.</div>
+          <span class="build-dep" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">DEPENDS ON: common-service, Kafka, all events flowing</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ ARCHITECTURE ═══ -->
+<div class="wrap" id="architecture">
+  <section class="section">
+    <div class="section-label">03 — Architecture</div>
+    <div class="section-title">System Design</div>
+    <div class="section-desc">
+      Single API Gateway entry point. Commands flow through the Payment Service (CQRS write model). Events propagate via Kafka to independent consumer services. Query reads from projected PostgreSQL views. Each service owns its database — no shared schemas.
+    </div>
+
+    <div class="arch-flow">
+      <div class="arch-flow-header">architecture · event-driven · microservices</div>
+      <div class="arch-flow-inner">
+
+        <!-- Tier 1: Client → Gateway → Payment -->
+        <div style="display:flex;align-items:center;gap:0;justify-content:center;flex-wrap:wrap;row-gap:8px;">
+          <div class="flow-box fb-client" style="min-width:100px">Client / API<br><span style="font-size:9px;opacity:.6">REST</span></div>
+          <div class="flow-arrow" style="min-width:32px"></div>
+          <div class="flow-box fb-gateway">API Gateway<br><span style="font-size:9px;opacity:.6">Spring Boot · :8080</span></div>
+          <div class="flow-arrow" style="min-width:32px"></div>
+          <div class="flow-box fb-payment">Payment Service<br><span style="font-size:9px;opacity:.6">Axon · CQRS · Outbox · :8081</span></div>
+        </div>
+
+        <!-- Kafka bus -->
+        <div style="text-align:center;margin:6px 0 0;">
+          <div class="arrow-up" style="color:var(--dim);font-size:18px;margin-bottom:-4px;">↓</div>
+        </div>
+        <div class="kafka-bus">
+          APACHE KAFKA
+          <div class="kafka-bus-label">Topics: payment.events · account.events · risk.events · notification.events</div>
+        </div>
+
+        <!-- Consumer services -->
+        <div class="consumers-row">
+          <div class="consumer-col">
+            <div class="arrow-up">↑</div>
+            <div class="flow-box fb-account" style="min-width:110px;font-size:10px">Account<br>Service<br><span style="font-size:9px;opacity:.6">Debit / Credit · :8083</span></div>
+            <div class="consumer-label" style="margin-top:6px">PostgreSQL :5433</div>
+          </div>
+          <div class="consumer-col">
+            <div class="arrow-up">↑</div>
+            <div class="flow-box fb-risk" style="min-width:110px;font-size:10px">Risk<br>Service<br><span style="font-size:9px;opacity:.6">Fraud Check · :8082</span></div>
+            <div class="consumer-label" style="margin-top:6px">Rules Engine</div>
+          </div>
+          <div class="consumer-col">
+            <div class="arrow-up">↑</div>
+            <div class="flow-box fb-notif" style="min-width:110px;font-size:10px">Notification<br>Service<br><span style="font-size:9px;opacity:.6">Webhook · DLT · :8085</span></div>
+            <div class="consumer-label" style="margin-top:6px">Event Log</div>
+          </div>
+          <div class="consumer-col">
+            <div class="arrow-up">↑</div>
+            <div class="flow-box fb-query" style="min-width:110px;font-size:10px">Query<br>Service<br><span style="font-size:9px;opacity:.6">Read Model · :8084</span></div>
+            <div class="consumer-label" style="margin-top:6px">PostgreSQL :5434</div>
+          </div>
+        </div>
+
+        <!-- Saga orchestrator note -->
+        <div style="margin-top:20px;padding:12px 16px;border:1px dashed rgba(236,72,153,.3);border-radius:8px;background:rgba(236,72,153,.04);text-align:center">
+          <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--saga);letter-spacing:1.5px;text-transform:uppercase">Axon Saga Orchestrator · :8086</span>
+          <span style="font-size:11.5px;color:var(--muted);margin-left:12px">coordinates multi-step distributed transactions · issues compensating commands on failure</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ COMMON SERVICE ═══ -->
+<div class="wrap" id="common">
+  <section class="section">
+    <div class="section-label">04 — Common Service (Shared Module)</div>
+    <div class="section-title">What Every Service Imports</div>
+    <div class="section-desc">
+      Non-runnable Maven module. No <code>@SpringBootApplication</code>. Just shared classes that every other module depends on. You already have a partial implementation — here's everything it needs to contain.
+    </div>
+
+    <div class="alert-box alert-info">
+      <strong>Package root:</strong> <code>com.suresh.paymentsimulator.common</code> — Every other service adds <code>&lt;dependency&gt;common-service&lt;/dependency&gt;</code> to its pom.xml.
+    </div>
+
+    <div class="impl-grid">
+
+      <!-- Commands -->
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--axon)"><span class="dot" style="background:var(--axon)"></span>Commands (common.command)</div>
+        <div class="code-block"><span class="kw">CreatePaymentCommand</span>
+  paymentId: <span class="st">String</span> <span class="cm">// UUID generated by gateway</span>
+  paymentReference: <span class="st">String</span> <span class="cm">// client-provided idempotency key</span>
+  amount: <span class="st">BigDecimal</span>
+  currency: <span class="st">String</span>
+  senderAccountNumber: <span class="st">String</span>
+  recipientAccountNumber: <span class="st">String</span>
+
+<span class="kw">ConfirmPaymentCommand</span>
+  paymentId: <span class="st">String</span>
+
+<span class="kw">CancelPaymentCommand</span>
+  paymentId: <span class="st">String</span>
+  reason: <span class="st">String</span> <span class="cm">// e.g. "INSUFFICIENT_FUNDS", "RISK_REJECTED"</span></div>
+        <div class="alert-box alert-warn" style="margin-bottom:0">
+          <strong>Key:</strong> All commands must have <code>@TargetAggregateIdentifier</code> on <code>paymentId</code>. This is how Axon routes the command to the correct aggregate instance.
+        </div>
+      </div>
+
+      <!-- Events -->
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--event)"><span class="dot" style="background:var(--event)"></span>Events (common.event)</div>
+        <div class="code-block"><span class="ev">PaymentInitiatedEvent</span>
+  paymentId, paymentReference, amount,
+  currency, senderAccountNumber,
+  recipientAccountNumber, timestamp
+
+<span class="ev">RiskApprovedEvent</span>
+  paymentId, timestamp
+
+<span class="ev">RiskRejectedEvent</span>
+  paymentId, reason, ruleViolated, timestamp
+
+<span class="ev">AccountDebitedEvent</span>
+  paymentId, accountNumber, amount, timestamp
+
+<span class="ev">AccountDebitFailedEvent</span>
+  paymentId, accountNumber, reason, timestamp
+
+<span class="ev">PaymentConfirmedEvent</span>
+  paymentId, timestamp
+
+<span class="ev">PaymentCancelledEvent</span>
+  paymentId, reason, timestamp</div>
+      </div>
+
+      <!-- DTOs you already have -->
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--spring)"><span class="dot" style="background:var(--spring)"></span>DTOs You Already Have (common.dto)</div>
+        <div class="code-block"><span class="st">Participant</span> <span class="cm">// base class</span>
+<span class="st">Sender</span> extends Participant
+  accountNumber, accountName, ifscCode
+
+<span class="st">Recipient</span> extends Participant
+  accountNumber, accountName, ifscCode
+
+<span class="st">Address</span>
+  line1, line2, city, country, postalCode
+
+<span class="st">ApiResponse&lt;T&gt;</span>
+  data, message, status, timestamp</div>
+      </div>
+
+      <!-- Enums + Entity -->
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--query)"><span class="dot" style="background:var(--query)"></span>Enums + Entities (common.enums, common.entity)</div>
+        <div class="code-block"><span class="hl">Status</span> enum
+  INITIATED, RISK_APPROVED, RISK_REJECTED,
+  DEBITED, DEBIT_FAILED,
+  CONFIRMED, CANCELLED
+
+<span class="cm">// TODO: Add these to your existing Status enum</span>
+<span class="cm">// Currently you have: SUCCESS, FAILURE, PENDING, CANCELED</span>
+<span class="cm">// Expand to match the event-driven lifecycle</span>
+
+<span class="hl">Currency</span> entity <span class="cm">// you already have this</span>
+
+<span class="hl">Transaction</span> entity <span class="cm">// you already have this</span></div>
+        <div class="alert-box alert-danger" style="margin-bottom:0">
+          <strong>Action needed:</strong> Your current <code>Status</code> enum has only 4 values. Expand it to track the full event lifecycle — each event maps to a status. The query-service projections will use these exact status values.
+        </div>
+      </div>
+    </div>
+
+    <div class="svc-section-hdr" style="margin-top:24px">Implementation Checklist — Common Service</div>
+    <ul class="checklist">
+      <li>Expand <code>Status</code> enum to: INITIATED, RISK_APPROVED, RISK_REJECTED, DEBITED, DEBIT_FAILED, CONFIRMED, CANCELLED</li>
+      <li>Create <code>common.command</code> package with <code>CreatePaymentCommand</code>, <code>ConfirmPaymentCommand</code>, <code>CancelPaymentCommand</code></li>
+      <li>Add <code>@TargetAggregateIdentifier</code> annotation on <code>paymentId</code> in each command</li>
+      <li>Create <code>common.event</code> package with all 7 events listed above</li>
+      <li>All events must be serializable — use <code>@Data</code> or explicit getters, no-arg constructor</li>
+      <li>Add Axon dependency to common-service pom.xml: <code>axon-spring-boot-starter</code></li>
+      <li>Verify <code>mvn clean install</code> succeeds and other modules can import it</li>
+    </ul>
+
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ SERVICES ═══ -->
+<div class="wrap" id="services">
+  <section class="section">
+    <div class="section-label">05 — Service-by-Service Implementation Guide</div>
+    <div class="section-title">Detailed Build Reference</div>
+    <div class="section-desc">Each service below includes: what it does, what classes to create, what database tables it owns, what Kafka topics it reads/writes, key Maven dependencies, application.yml configuration, and a build checklist.</div>
+
+    <div class="services-grid">
+
+      <!-- ═══ API GATEWAY ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">01</div>
+          <div>
+            <div class="svc-name">API Gateway</div>
+            <div class="svc-role">ENTRY POINT · REST · VALIDATION · IDEMPOTENCY · PORT :8080</div>
+          </div>
+          <div class="svc-accent" style="background:var(--spring)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">Single external entry point. Validates input, checks idempotency key (returns cached response if duplicate), and forwards <code>CreatePaymentCommand</code> to Payment Service via Axon's <code>CommandGateway</code>. Returns <code>202 Accepted</code> with payment ID for async polling. <strong>No business logic lives here.</strong></p>
+
+          <div class="alert-box alert-success">
+            <strong>Current state:</strong> You already have the controller, request DTOs, currency validation, and tiered cache (Caffeine → Redis → DB). <strong>What's missing:</strong> Actually sending the command to Axon and returning the payment ID.
+          </div>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.gateway</span>
+├── controller/
+│   └── <span class="st">PaymentInitiatorController</span> <span class="cm">// ✅ exists — needs CommandGateway wiring</span>
+├── request/
+│   └── <span class="st">InitiatePaymentRequest</span>     <span class="cm">// ✅ exists</span>
+├── response/
+│   └── <span class="st">InitiatePaymentResponse</span>    <span class="cm">// ✅ exists — add paymentId field</span>
+├── config/
+│   ├── <span class="st">DatabaseConfig</span>             <span class="cm">// ✅ exists</span>
+│   ├── <span class="st">RedisConfig</span>                <span class="cm">// ✅ exists</span>
+│   ├── <span class="st">TieredCacheConfig</span>          <span class="cm">// ✅ exists</span>
+│   └── <span class="kw">AxonConfig</span>                 <span class="cm">// NEW — configure CommandGateway</span>
+├── service/
+│   ├── <span class="st">TransactionCacheService</span>    <span class="cm">// ✅ exists</span>
+│   └── <span class="kw">PaymentCommandService</span>      <span class="cm">// NEW — wraps CommandGateway.send()</span>
+├── validators/
+│   ├── <span class="st">ValidCurrency</span>              <span class="cm">// ✅ exists</span>
+│   └── <span class="st">CurrencyValidatorImpl</span>      <span class="cm">// ✅ exists</span>
+├── exception/
+│   └── <span class="kw">GlobalExceptionHandler</span>     <span class="cm">// NEW — @RestControllerAdvice</span>
+└── constants/
+    └── <span class="st">UrlMappingConstants</span>        <span class="cm">// ✅ exists</span></div>
+
+          <div class="svc-section-hdr">What To Implement</div>
+          <ul class="svc-items">
+            <li>Inject Axon's <code>CommandGateway</code> into the controller (or a new <code>PaymentCommandService</code>)</li>
+            <li>In <code>initiatePayment()</code>: generate UUID → build <code>CreatePaymentCommand</code> → call <code>commandGateway.sendAndWait()</code></li>
+            <li>Return <code>202 Accepted</code> with the <code>paymentId</code> in the response body</li>
+            <li>Fix the <code>Repeat-Flag</code> logic: if idempotency key already exists in cache → return the cached response with the original <code>paymentId</code> instead of processing again</li>
+            <li>Add <code>@RestControllerAdvice</code> global exception handler for validation errors, Axon exceptions, timeout, etc.</li>
+            <li>Add request logging with correlation ID header (<code>X-Correlation-Id</code>)</li>
+          </ul>
+
+          <div class="svc-section-hdr">API Contract</div>
+          <div class="code-block"><span class="tp">POST</span> /payments/initiate
+<span class="cm">Headers:</span>
+  Content-Type: application/json
+  Repeat-Flag: false <span class="cm">// or true for idempotency check</span>
+  X-Correlation-Id: uuid <span class="cm">// optional, for tracing</span>
+
+<span class="cm">Request Body:</span>
+{
+  "paymentReference": "<span class="st">PAY-2026-001</span>",
+  "amount": <span class="hl">15000</span>,
+  "currency": "<span class="st">INR</span>",
+  "sender": {
+    "accountNumber": "<span class="st">1234567890</span>",
+    "accountName": "<span class="st">Suresh Chidella</span>",
+    "ifscCode": "<span class="st">SBIN0001234</span>"
+  },
+  "recipient": {
+    "accountNumber": "<span class="st">9876543210</span>",
+    "accountName": "<span class="st">John Doe</span>",
+    "ifscCode": "<span class="st">HDFC0002345</span>"
+  }
+}
+
+<span class="cm">Response: 202 Accepted</span>
+{
+  "data": {
+    "paymentId": "<span class="st">uuid</span>",
+    "status": "<span class="hl">INITIATED</span>"
+  },
+  "message": "Payment initiated successfully",
+  "timestamp": "2026-06-11T10:00:00"
+}</div>
+
+          <div class="svc-section-hdr">Key Maven Dependencies</div>
+          <div class="code-block"><span class="cm">&lt;!-- You already have most of these --&gt;</span>
+spring-boot-starter-web
+spring-boot-starter-validation
+spring-boot-starter-data-jpa
+spring-boot-starter-data-redis
+<span class="kw">axon-spring-boot-starter</span>         <span class="cm">// NEW — for CommandGateway</span>
+<span class="kw">spring-boot-starter-actuator</span>      <span class="cm">// health checks</span>
+common-service                     <span class="cm">// your shared module</span></div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Add Axon dependency to pom.xml</li>
+            <li>Create <code>PaymentCommandService</code> wrapping <code>CommandGateway</code></li>
+            <li>Wire controller → generate UUID → send command → return 202 with paymentId</li>
+            <li>Fix idempotency: cache lookup before command dispatch, return cached response if found</li>
+            <li>Add <code>GlobalExceptionHandler</code> with proper error responses</li>
+            <li>Add <code>InitiatePaymentResponse.paymentId</code> field</li>
+            <li>Test: POST → returns 202 + paymentId. Duplicate POST → returns same paymentId</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--spring);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)">Spring Boot</span>
+            <span class="svc-tag" style="color:#818cf8;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.06)">Bean Validation</span>
+            <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Idempotency Cache</span>
+            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">CommandGateway</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ PAYMENT SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">02</div>
+          <div>
+            <div class="svc-name">Payment Service</div>
+            <div class="svc-role">CORE WRITE MODEL · CQRS · EVENT SOURCING · OUTBOX · PORT :8081</div>
+          </div>
+          <div class="svc-accent" style="background:var(--axon)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">The heart of the system. Manages the <code>PaymentAggregate</code> via Axon. All state changes produce domain events persisted to Axon's event store. The Outbox relay handles publishing to Kafka without dual-write risk. <strong>This is the most complex service — take your time.</strong></p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.payment</span>
+├── aggregate/
+│   └── <span class="kw">PaymentAggregate</span>           <span class="cm">// @Aggregate — THE core class</span>
+├── command/
+│   └── <span class="cm">(imported from common-service)</span>
+├── event/
+│   └── <span class="cm">(imported from common-service)</span>
+├── outbox/
+│   ├── <span class="kw">OutboxEvent</span>                <span class="cm">// @Entity — maps to outbox_events table</span>
+│   ├── <span class="kw">OutboxRepository</span>           <span class="cm">// JpaRepository&lt;OutboxEvent, Long&gt;</span>
+│   ├── <span class="kw">OutboxRelay</span>                <span class="cm">// @Scheduled — polls unpublished, sends to Kafka</span>
+│   └── <span class="kw">OutboxEventListener</span>        <span class="cm">// listens to Axon events, writes outbox rows</span>
+├── config/
+│   ├── <span class="kw">AxonConfig</span>                 <span class="cm">// Axon Server connection + event store config</span>
+│   └── <span class="kw">KafkaProducerConfig</span>        <span class="cm">// idempotent producer, transactional.id</span>
+└── <span class="st">PaymentServiceApplication</span>     <span class="cm">// @SpringBootApplication</span></div>
+
+          <div class="svc-section-hdr">PaymentAggregate — The Core Class</div>
+          <div class="code-block"><span class="kw">@Aggregate</span>
+public class PaymentAggregate {
+
+    <span class="kw">@AggregateIdentifier</span>
+    private <span class="st">String</span> paymentId;
+    private <span class="st">String</span> paymentReference;
+    private <span class="st">BigDecimal</span> amount;
+    private <span class="st">String</span> currency;
+    private <span class="st">Status</span> status;
+
+    <span class="cm">// No-arg constructor required by Axon</span>
+    protected PaymentAggregate() {}
+
+    <span class="cm">// ── Command Handlers ──</span>
+
+    <span class="kw">@CommandHandler</span>
+    public PaymentAggregate(<span class="ev">CreatePaymentCommand</span> cmd) {
+        <span class="cm">// Validate invariants here</span>
+        AggregateLifecycle.apply(new <span class="ev">PaymentInitiatedEvent</span>(
+            cmd.getPaymentId(),
+            cmd.getPaymentReference(),
+            cmd.getAmount(),
+            cmd.getCurrency(),
+            cmd.getSenderAccountNumber(),
+            cmd.getRecipientAccountNumber(),
+            Instant.now()
+        ));
+    }
+
+    <span class="kw">@CommandHandler</span>
+    public void handle(<span class="ev">ConfirmPaymentCommand</span> cmd) {
+        <span class="st">if</span> (this.status != Status.DEBITED)
+            <span class="st">throw new</span> IllegalStateException(<span class="st">"Cannot confirm"</span>);
+        AggregateLifecycle.apply(new <span class="ev">PaymentConfirmedEvent</span>(...));
+    }
+
+    <span class="kw">@CommandHandler</span>
+    public void handle(<span class="ev">CancelPaymentCommand</span> cmd) {
+        AggregateLifecycle.apply(new <span class="ev">PaymentCancelledEvent</span>(
+            cmd.getPaymentId(), cmd.getReason(), Instant.now()
+        ));
+    }
+
+    <span class="cm">// ── Event Sourcing Handlers (mutate state from events) ──</span>
+
+    <span class="kw">@EventSourcingHandler</span>
+    public void on(<span class="ev">PaymentInitiatedEvent</span> e) {
+        this.paymentId = e.getPaymentId();
+        this.status = Status.INITIATED;
+        this.amount = e.getAmount();
+        <span class="cm">// ... set all fields</span>
+    }
+
+    <span class="kw">@EventSourcingHandler</span>
+    public void on(<span class="ev">PaymentConfirmedEvent</span> e) {
+        this.status = Status.CONFIRMED;
+    }
+
+    <span class="kw">@EventSourcingHandler</span>
+    public void on(<span class="ev">PaymentCancelledEvent</span> e) {
+        this.status = Status.CANCELLED;
+    }
+}</div>
+
+          <div class="svc-section-hdr">Outbox Pattern Implementation</div>
+          <div class="code-block"><span class="cm">// 1. OutboxEvent entity</span>
+<span class="kw">@Entity @Table</span>(name = "outbox_events")
+public class OutboxEvent {
+    <span class="kw">@Id @GeneratedValue</span> private <span class="st">Long</span> id;
+    private <span class="st">String</span> aggregateId;
+    private <span class="st">String</span> eventType;      <span class="cm">// e.g. "PaymentInitiatedEvent"</span>
+    <span class="kw">@Column</span>(columnDefinition = "TEXT")
+    private <span class="st">String</span> payload;        <span class="cm">// JSON serialized event</span>
+    private <span class="st">boolean</span> published;     <span class="cm">// false on creation</span>
+    private <span class="st">Instant</span> createdAt;
+    private <span class="st">Instant</span> publishedAt;
+}
+
+<span class="cm">// 2. OutboxEventListener — writes outbox row when aggregate emits event</span>
+<span class="kw">@Component</span>
+public class OutboxEventListener {
+    <span class="kw">@EventHandler</span>
+    public void on(<span class="ev">PaymentInitiatedEvent</span> event) {
+        OutboxEvent outbox = new OutboxEvent();
+        outbox.setAggregateId(event.getPaymentId());
+        outbox.setEventType("PaymentInitiatedEvent");
+        outbox.setPayload(objectMapper.writeValueAsString(event));
+        outbox.setPublished(false);
+        outbox.setCreatedAt(Instant.now());
+        outboxRepository.save(outbox);
+        <span class="cm">// This runs in SAME transaction as Axon's event store write</span>
+    }
+}
+
+<span class="cm">// 3. OutboxRelay — scheduled poller</span>
+<span class="kw">@Component</span>
+public class OutboxRelay {
+    <span class="kw">@Scheduled</span>(fixedDelay = 200) <span class="cm">// 200ms poll interval</span>
+    public void publishPendingEvents() {
+        List&lt;OutboxEvent&gt; pending = outboxRepository
+            .findByPublishedFalseOrderByCreatedAtAsc();
+        for (OutboxEvent event : pending) {
+            kafkaTemplate.send("payment.events", event.getPayloadAsJSON())
+                .whenComplete((result, ex) -> {
+                    <span class="st">if</span> (ex == null) {
+                        event.setPublished(true);
+                        event.setPublishedAt(Instant.now());
+                        outboxRepository.save(event);
+                    }
+                });
+        }
+    }
+}</div>
+
+          <div class="svc-section-hdr">Database — payment_db (:5432)</div>
+          <div class="code-block"><span class="cm">-- Axon manages the event store tables automatically</span>
+<span class="cm">-- You only need to create the outbox table:</span>
+
+<span class="kw">CREATE TABLE</span> outbox_events (
+    id              BIGSERIAL PRIMARY KEY,
+    aggregate_id    VARCHAR(36) NOT NULL,
+    event_type      VARCHAR(100) NOT NULL,
+    payload         TEXT NOT NULL,
+    published       BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    published_at    TIMESTAMP
+);
+
+<span class="kw">CREATE INDEX</span> idx_outbox_unpublished
+    ON outbox_events (published, created_at)
+    WHERE published = FALSE;</div>
+
+          <div class="svc-section-hdr">Kafka Topics — Produces</div>
+          <ul class="svc-items">
+            <li><code>payment.events</code> — all payment lifecycle events (via Outbox relay)</li>
+          </ul>
+
+          <div class="svc-section-hdr">Key Maven Dependencies</div>
+          <div class="code-block">spring-boot-starter-web
+spring-boot-starter-data-jpa
+<span class="kw">axon-spring-boot-starter</span>
+<span class="kw">spring-kafka</span>
+postgresql <span class="cm">// runtime</span>
+jackson-databind <span class="cm">// JSON serialization for outbox payload</span>
+common-service</div>
+
+          <div class="svc-section-hdr">application.yml</div>
+          <div class="code-block">server:
+  port: <span class="hl">8081</span>
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:<span class="hl">5432</span>/payment_db
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: <span class="st">true</span>
+        transactional.id: <span class="st">payment-producer-1</span>
+        acks: <span class="st">all</span>
+        max.in.flight.requests.per.connection: <span class="st">5</span>
+
+axon:
+  axonserver:
+    servers: localhost:8124</div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create <code>PaymentAggregate</code> with <code>@Aggregate</code>, <code>@AggregateIdentifier</code></li>
+            <li>Implement <code>@CommandHandler</code> for Create, Confirm, Cancel</li>
+            <li>Implement <code>@EventSourcingHandler</code> for all 3 events</li>
+            <li>Create <code>outbox_events</code> table and <code>OutboxEvent</code> entity</li>
+            <li>Create <code>OutboxEventListener</code> — writes outbox row on each event</li>
+            <li>Create <code>OutboxRelay</code> — <code>@Scheduled</code> poller, publishes to Kafka, marks published after ACK</li>
+            <li>Configure idempotent Kafka producer in application.yml</li>
+            <li>Test: send <code>CreatePaymentCommand</code> via gateway → verify event in Axon event store + Kafka topic</li>
+            <li>Test: verify outbox row is marked published = true after Kafka ACK</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">Axon Framework</span>
+            <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Outbox Pattern</span>
+            <span class="svc-tag" style="color:var(--event);border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.06)">Event Sourcing</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">Kafka Producer</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ RISK SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">03</div>
+          <div>
+            <div class="svc-name">Risk Service</div>
+            <div class="svc-role">FRAUD DETECTION · RULE ENGINE · ASYNC SCREENING · PORT :8082</div>
+          </div>
+          <div class="svc-accent" style="background:var(--risk)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">Kafka consumer that screens every payment against configurable fraud rules before account debit. A rejection triggers full Saga rollback. This is your simplest consumer — build it first to validate the Kafka pipeline end-to-end.</p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.risk</span>
+├── consumer/
+│   └── <span class="kw">PaymentEventConsumer</span>       <span class="cm">// @KafkaListener on payment.events</span>
+├── rules/
+│   ├── <span class="kw">RiskRule</span>                   <span class="cm">// interface — evaluate(PaymentInitiatedEvent)</span>
+│   ├── <span class="kw">VelocityRule</span>               <span class="cm">// &gt; N txns per minute from same sender</span>
+│   ├── <span class="kw">AmountThresholdRule</span>        <span class="cm">// single payment above configurable limit</span>
+│   ├── <span class="kw">BlocklistRule</span>              <span class="cm">// sender or receiver on block list</span>
+│   └── <span class="kw">CurrencyMismatchRule</span>       <span class="cm">// sender and receiver currency mismatch</span>
+├── service/
+│   └── <span class="kw">RiskEvaluationService</span>      <span class="cm">// runs all rules, returns approve/reject</span>
+├── producer/
+│   └── <span class="kw">RiskEventProducer</span>          <span class="cm">// publishes to risk.events topic</span>
+├── config/
+│   ├── <span class="kw">KafkaConsumerConfig</span>        <span class="cm">// consumer group: risk-service</span>
+│   ├── <span class="kw">KafkaProducerConfig</span>
+│   └── <span class="kw">RiskRulesConfig</span>            <span class="cm">// configurable thresholds from application.yml</span>
+└── <span class="st">RiskServiceApplication</span></div>
+
+          <div class="svc-section-hdr">How It Works</div>
+          <div class="code-block"><span class="kw">@KafkaListener</span>(topics = "payment.events", groupId = "risk-service")
+public void consume(<span class="ev">PaymentInitiatedEvent</span> event) {
+    <span class="cm">// 1. Deserialize event from Kafka message</span>
+    <span class="cm">// 2. Run all RiskRule implementations against it</span>
+    <span class="cm">// 3. If ALL pass → publish RiskApprovedEvent</span>
+    <span class="cm">// 4. If ANY fail → publish RiskRejectedEvent with reason + rule name</span>
+
+    RiskResult result = riskEvaluationService.evaluate(event);
+
+    <span class="st">if</span> (result.isApproved()) {
+        producer.send("risk.events", new <span class="ev">RiskApprovedEvent</span>(
+            event.getPaymentId(), Instant.now()));
+    } <span class="st">else</span> {
+        producer.send("risk.events", new <span class="ev">RiskRejectedEvent</span>(
+            event.getPaymentId(), result.getReason(),
+            result.getRuleViolated(), Instant.now()));
+    }
+}</div>
+
+          <div class="svc-section-hdr">Fraud Rules — What To Implement</div>
+          <ul class="svc-items">
+            <li><strong>VelocityRule:</strong> Track sender transactions in a time window. If &gt; <code>risk.velocity.max-per-minute</code> (configurable, default 5) → reject. Use an in-memory sliding window or a simple DB counter.</li>
+            <li><strong>AmountThresholdRule:</strong> If <code>amount &gt; risk.amount.threshold</code> (configurable, default 500000) → reject. Simple comparison.</li>
+            <li><strong>BlocklistRule:</strong> Maintain a Set of blocked account numbers (load from config or a simple table). If sender or receiver is in the set → reject.</li>
+            <li><strong>CurrencyMismatchRule:</strong> If the payment currency doesn't match the sender's expected currency → reject. For now, just validate against a whitelist of supported currencies.</li>
+          </ul>
+
+          <div class="svc-section-hdr">Kafka Topics</div>
+          <ul class="svc-items">
+            <li><strong>Consumes:</strong> <code>payment.events</code> (group: <code>risk-service</code>)</li>
+            <li><strong>Produces:</strong> <code>risk.events</code></li>
+          </ul>
+
+          <div class="svc-section-hdr">application.yml</div>
+          <div class="code-block">server:
+  port: <span class="hl">8082</span>
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: risk-service
+      auto-offset-reset: earliest
+      enable-auto-commit: <span class="st">false</span>
+
+<span class="cm"># Custom risk thresholds</span>
+risk:
+  velocity:
+    max-per-minute: 5
+  amount:
+    threshold: 500000
+  blocklist:
+    accounts: ["BLOCKED001", "BLOCKED002"]</div>
+
+          <div class="svc-section-hdr">No Database</div>
+          <div class="alert-box alert-info" style="margin-bottom:0">
+            <strong>This service has no database.</strong> It's stateless. All rules are evaluated from config and in-memory data. If you later want velocity tracking, you could add Redis, but for now keep it simple.
+          </div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create Spring Boot app on port 8082</li>
+            <li>Add <code>@KafkaListener</code> consumer for <code>payment.events</code></li>
+            <li>Create <code>RiskRule</code> interface with <code>evaluate(PaymentInitiatedEvent)</code> method</li>
+            <li>Implement at least <code>AmountThresholdRule</code> and <code>BlocklistRule</code> (simplest)</li>
+            <li>Create <code>RiskEvaluationService</code> that runs all rules</li>
+            <li>Publish <code>RiskApprovedEvent</code> or <code>RiskRejectedEvent</code> to <code>risk.events</code></li>
+            <li>Test: send a normal payment → RiskApprovedEvent appears on Kafka</li>
+            <li>Test: send a payment above threshold → RiskRejectedEvent with reason</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--risk);border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06)">Rule Engine</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">Kafka Consumer</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">Kafka Producer</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ACCOUNT SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">04</div>
+          <div>
+            <div class="svc-name">Account Service</div>
+            <div class="svc-role">BALANCE MANAGEMENT · DEBIT / CREDIT · IDEMPOTENT · PORT :8083</div>
+          </div>
+          <div class="svc-accent" style="background:var(--event)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">Consumes <code>PaymentInitiatedEvent</code> from Kafka and attempts to debit the sender account. Publishes the result as a new event. <strong>Critical:</strong> Must handle idempotent processing (Kafka redelivery) and optimistic locking (concurrent debits).</p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.account</span>
+├── consumer/
+│   └── <span class="kw">PaymentEventConsumer</span>       <span class="cm">// @KafkaListener on payment.events</span>
+├── entity/
+│   ├── <span class="kw">Account</span>                    <span class="cm">// @Entity — account_id, balance, currency, version</span>
+│   └── <span class="kw">ProcessedEvent</span>             <span class="cm">// @Entity — event_id, processed_at</span>
+├── repository/
+│   ├── <span class="kw">AccountRepository</span>          <span class="cm">// JpaRepository</span>
+│   └── <span class="kw">ProcessedEventRepository</span>   <span class="cm">// JpaRepository — for idempotency</span>
+├── service/
+│   └── <span class="kw">AccountService</span>             <span class="cm">// debit(), credit(), checkBalance()</span>
+├── producer/
+│   └── <span class="kw">AccountEventProducer</span>       <span class="cm">// publishes to account.events</span>
+└── config/
+    ├── <span class="kw">KafkaConsumerConfig</span>
+    └── <span class="kw">KafkaProducerConfig</span></div>
+
+          <div class="svc-section-hdr">How The Debit Flow Works</div>
+          <div class="code-block"><span class="kw">@KafkaListener</span>(topics = "payment.events", groupId = "account-service")
+<span class="kw">@Transactional</span>
+public void consume(<span class="ev">PaymentInitiatedEvent</span> event) {
+
+    <span class="cm">// 1. IDEMPOTENCY CHECK — has this event already been processed?</span>
+    <span class="st">if</span> (processedEventRepo.existsById(event.getPaymentId())) {
+        log.info("Duplicate event {}, skipping", event.getPaymentId());
+        <span class="st">return</span>;
+    }
+
+    <span class="cm">// 2. FIND SENDER ACCOUNT</span>
+    Account sender = accountRepo.findByAccountNumber(
+        event.getSenderAccountNumber())
+        .orElseThrow(() -> new AccountNotFoundException(...));
+
+    <span class="cm">// 3. CHECK BALANCE</span>
+    <span class="st">if</span> (sender.getBalance().compareTo(event.getAmount()) < 0) {
+        <span class="cm">// Insufficient funds → publish failure event</span>
+        producer.send("account.events", new <span class="ev">AccountDebitFailedEvent</span>(
+            event.getPaymentId(),
+            event.getSenderAccountNumber(),
+            "INSUFFICIENT_FUNDS",
+            Instant.now()
+        ));
+        processedEventRepo.save(new ProcessedEvent(event.getPaymentId()));
+        <span class="st">return</span>;
+    }
+
+    <span class="cm">// 4. DEBIT — with optimistic lock (@Version)</span>
+    sender.setBalance(sender.getBalance().subtract(event.getAmount()));
+    accountRepo.save(sender); <span class="cm">// @Version prevents concurrent overwrites</span>
+
+    <span class="cm">// 5. MARK AS PROCESSED + PUBLISH SUCCESS</span>
+    processedEventRepo.save(new ProcessedEvent(event.getPaymentId()));
+    producer.send("account.events", new <span class="ev">AccountDebitedEvent</span>(
+        event.getPaymentId(),
+        event.getSenderAccountNumber(),
+        event.getAmount(),
+        Instant.now()
+    ));
+}</div>
+
+          <div class="svc-section-hdr">Database — account_db (:5433)</div>
+          <div class="code-block"><span class="kw">CREATE TABLE</span> accounts (
+    id              BIGSERIAL PRIMARY KEY,
+    account_number  VARCHAR(34) UNIQUE NOT NULL,
+    account_name    VARCHAR(100) NOT NULL,
+    balance         NUMERIC(19,2) NOT NULL DEFAULT 0,
+    currency        VARCHAR(3) NOT NULL DEFAULT 'INR',
+    version         BIGINT NOT NULL DEFAULT 0, <span class="cm">-- optimistic lock</span>
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+<span class="kw">CREATE TABLE</span> processed_events (
+    event_id        VARCHAR(36) PRIMARY KEY,
+    processed_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+<span class="cm">-- Seed test accounts</span>
+<span class="kw">INSERT INTO</span> accounts (account_number, account_name, balance, currency)
+<span class="kw">VALUES</span>
+    ('1234567890', 'Suresh Chidella', 100000.00, 'INR'),
+    ('9876543210', 'John Doe', 50000.00, 'INR');</div>
+
+          <div class="svc-section-hdr">Kafka Topics</div>
+          <ul class="svc-items">
+            <li><strong>Consumes:</strong> <code>payment.events</code> (group: <code>account-service</code>)</li>
+            <li><strong>Produces:</strong> <code>account.events</code></li>
+          </ul>
+
+          <div class="alert-box alert-danger">
+            <strong>Critical:</strong> The <code>@Version</code> field on the Account entity enables optimistic locking. If two consumers try to debit the same account simultaneously, the second one gets an <code>OptimisticLockException</code>. Handle this by retrying. Spring Retry with <code>@Retryable</code> works well here.
+          </div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create Spring Boot app on port 8083 with PostgreSQL (<code>account_db:5433</code>)</li>
+            <li>Create <code>Account</code> entity with <code>@Version</code> for optimistic locking</li>
+            <li>Create <code>ProcessedEvent</code> entity for idempotency tracking</li>
+            <li>Implement <code>@KafkaListener</code> with idempotency check → balance check → debit → publish</li>
+            <li>All 3 operations (idempotency insert + debit + publish) must be in same <code>@Transactional</code></li>
+            <li>Seed test accounts with <code>data.sql</code> or Flyway migration</li>
+            <li>Test: payment with sufficient funds → <code>AccountDebitedEvent</code> + balance reduced</li>
+            <li>Test: payment with insufficient funds → <code>AccountDebitFailedEvent</code> + balance unchanged</li>
+            <li>Test: duplicate event → silently skipped, no double debit</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">Kafka Consumer</span>
+            <span class="svc-tag" style="color:#818cf8;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.06)">Optimistic Lock</span>
+            <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Idempotent</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SAGA SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">05</div>
+          <div>
+            <div class="svc-name">Payment Saga Service</div>
+            <div class="svc-role">SAGA ORCHESTRATOR · COMPENSATION · DISTRIBUTED TRANSACTIONS · PORT :8086</div>
+          </div>
+          <div class="svc-accent" style="background:var(--saga)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">Axon Saga that coordinates the multi-step payment flow. Listens for events from risk-service and account-service. If both succeed → sends <code>ConfirmPaymentCommand</code>. If either fails → sends <code>CancelPaymentCommand</code> to trigger compensation.</p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.saga</span>
+├── <span class="kw">PaymentSaga</span>                    <span class="cm">// THE Saga class — all logic here</span>
+├── config/
+│   └── <span class="kw">AxonConfig</span>                 <span class="cm">// Axon Server connection</span>
+└── <span class="st">SagaServiceApplication</span></div>
+
+          <div class="svc-section-hdr">PaymentSaga — The Complete Class</div>
+          <div class="code-block">public class <span class="kw">PaymentSaga</span> {
+
+    <span class="cm">// Transient — injected by Axon, not serialized</span>
+    <span class="kw">@Autowired</span>
+    private transient <span class="st">CommandGateway</span> commandGateway;
+
+    <span class="cm">// Saga state — serialized between events</span>
+    private <span class="st">String</span> paymentId;
+    private <span class="st">boolean</span> riskApproved = false;
+    private <span class="st">boolean</span> accountDebited = false;
+
+    <span class="cm">// ── STARTED by PaymentInitiatedEvent ──</span>
+    <span class="kw">@StartSaga</span>
+    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    public void on(<span class="ev">PaymentInitiatedEvent</span> event) {
+        this.paymentId = event.getPaymentId();
+        <span class="cm">// Just record — wait for risk + account results</span>
+    }
+
+    <span class="cm">// ── Risk approved ──</span>
+    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    public void on(<span class="ev">RiskApprovedEvent</span> event) {
+        this.riskApproved = true;
+        tryConfirm();
+    }
+
+    <span class="cm">// ── Account debited ──</span>
+    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    public void on(<span class="ev">AccountDebitedEvent</span> event) {
+        this.accountDebited = true;
+        tryConfirm();
+    }
+
+    <span class="cm">// ── BOTH succeeded → confirm payment ──</span>
+    private void tryConfirm() {
+        <span class="st">if</span> (riskApproved && accountDebited) {
+            commandGateway.send(new <span class="ev">ConfirmPaymentCommand</span>(paymentId));
+            <span class="kw">SagaLifecycle.end()</span>;
+        }
+    }
+
+    <span class="cm">// ── Risk rejected → cancel payment ──</span>
+    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    public void on(<span class="ev">RiskRejectedEvent</span> event) {
+        commandGateway.send(new <span class="ev">CancelPaymentCommand</span>(
+            paymentId, "RISK_REJECTED: " + event.getReason()));
+        <span class="kw">SagaLifecycle.end()</span>;
+    }
+
+    <span class="cm">// ── Account debit failed → cancel payment ──</span>
+    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    public void on(<span class="ev">AccountDebitFailedEvent</span> event) {
+        commandGateway.send(new <span class="ev">CancelPaymentCommand</span>(
+            paymentId, "INSUFFICIENT_FUNDS"));
+        <span class="kw">SagaLifecycle.end()</span>;
+    }
+}</div>
+
+          <div class="alert-box alert-warn">
+            <strong>Key detail:</strong> <code>associationProperty = "paymentId"</code> is how Axon routes events to the correct Saga instance. Every event class MUST have a <code>getPaymentId()</code> method. Axon uses this to find the Saga instance that's tracking that specific payment.
+          </div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create Spring Boot app on port 8086 with Axon dependency</li>
+            <li>Create <code>PaymentSaga</code> class with all 5 event handlers</li>
+            <li>Verify <code>@StartSaga</code> on <code>PaymentInitiatedEvent</code></li>
+            <li>Verify <code>SagaLifecycle.end()</code> is called on both success and failure paths</li>
+            <li>Test happy path: initiated → risk approved → debited → ConfirmPaymentCommand sent</li>
+            <li>Test failure: initiated → risk approved → debit failed → CancelPaymentCommand sent</li>
+            <li>Test failure: initiated → risk rejected → CancelPaymentCommand sent immediately</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">Axon Saga</span>
+            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">CommandGateway</span>
+            <span class="svc-tag" style="color:var(--event);border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.06)">Compensation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ QUERY SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">06</div>
+          <div>
+            <div class="svc-name">Query Service</div>
+            <div class="svc-role">READ MODEL · PROJECTIONS · REST QUERIES · PORT :8084</div>
+          </div>
+          <div class="svc-accent" style="background:var(--query)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">The CQRS read side. Consumes ALL events from Kafka and maintains denormalized projection tables. Exposes REST endpoints for payment status polling. Completely decoupled from the write model — can be rebuilt from the event log at any time.</p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.query</span>
+├── consumer/
+│   └── <span class="kw">EventProjectionConsumer</span>    <span class="cm">// @KafkaListener — ALL topics</span>
+├── entity/
+│   ├── <span class="kw">PaymentSummary</span>             <span class="cm">// @Entity — denormalized payment view</span>
+│   ├── <span class="kw">AccountBalanceView</span>         <span class="cm">// @Entity — projected balance</span>
+│   └── <span class="kw">PaymentAuditLog</span>            <span class="cm">// @Entity — every event for a payment</span>
+├── repository/
+│   ├── <span class="kw">PaymentSummaryRepository</span>
+│   ├── <span class="kw">AccountBalanceViewRepository</span>
+│   └── <span class="kw">PaymentAuditLogRepository</span>
+├── controller/
+│   └── <span class="kw">QueryController</span>            <span class="cm">// REST endpoints for reads</span>
+└── config/
+    └── <span class="kw">KafkaConsumerConfig</span>        <span class="cm">// group: query-service</span></div>
+
+          <div class="svc-section-hdr">Database — query_db (:5434)</div>
+          <div class="code-block"><span class="kw">CREATE TABLE</span> payment_summary (
+    payment_id      VARCHAR(36) PRIMARY KEY,
+    payment_ref     VARCHAR(36),
+    amount          NUMERIC(19,2),
+    currency        VARCHAR(3),
+    sender_account  VARCHAR(34),
+    recipient_account VARCHAR(34),
+    status          VARCHAR(20), <span class="cm">-- INITIATED → CONFIRMED / CANCELLED</span>
+    created_at      TIMESTAMP,
+    updated_at      TIMESTAMP
+);
+
+<span class="kw">CREATE TABLE</span> account_balance_view (
+    account_number  VARCHAR(34) PRIMARY KEY,
+    current_balance NUMERIC(19,2),
+    last_updated    TIMESTAMP
+);
+
+<span class="kw">CREATE TABLE</span> payment_audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    payment_id      VARCHAR(36) NOT NULL,
+    event_type      VARCHAR(50) NOT NULL,
+    event_data      TEXT, <span class="cm">-- JSON</span>
+    timestamp       TIMESTAMP NOT NULL
+);
+<span class="kw">CREATE INDEX</span> idx_audit_payment ON payment_audit_log(payment_id);</div>
+
+          <div class="svc-section-hdr">How Projections Work</div>
+          <div class="code-block"><span class="kw">@KafkaListener</span>(topics = {"payment.events", "risk.events", "account.events"},
+               groupId = "query-service")
+public void consume(String message) {
+    <span class="cm">// Deserialize → determine event type → update projections</span>
+
+    <span class="cm">// PaymentInitiatedEvent → INSERT into payment_summary (status=INITIATED)</span>
+    <span class="cm">// RiskApprovedEvent     → UPDATE payment_summary SET status=RISK_APPROVED</span>
+    <span class="cm">// RiskRejectedEvent     → UPDATE payment_summary SET status=RISK_REJECTED</span>
+    <span class="cm">// AccountDebitedEvent   → UPDATE payment_summary SET status=DEBITED</span>
+    <span class="cm">//                       → UPDATE account_balance_view (reduce balance)</span>
+    <span class="cm">// AccountDebitFailedEvent → UPDATE payment_summary SET status=DEBIT_FAILED</span>
+    <span class="cm">// PaymentConfirmedEvent → UPDATE payment_summary SET status=CONFIRMED</span>
+    <span class="cm">// PaymentCancelledEvent → UPDATE payment_summary SET status=CANCELLED</span>
+
+    <span class="cm">// ALWAYS: INSERT into payment_audit_log for every event</span>
+}</div>
+
+          <div class="svc-section-hdr">REST API Endpoints</div>
+          <div class="code-block"><span class="tp">GET</span> /payments/{id}
+<span class="cm">→ Returns PaymentSummary + list of audit events</span>
+<span class="cm">→ Client polls this until status = CONFIRMED or CANCELLED</span>
+
+<span class="tp">GET</span> /accounts/{accountNumber}/balance
+<span class="cm">→ Returns current projected balance from account_balance_view</span>
+
+<span class="tp">GET</span> /payments?status=FAILED&page=0&size=20
+<span class="cm">→ Filtered query with pagination</span></div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create Spring Boot app on port 8084 with PostgreSQL (<code>query_db:5434</code>)</li>
+            <li>Create all 3 projection entities + repositories</li>
+            <li>Create <code>@KafkaListener</code> that consumes from all 3 event topics</li>
+            <li>Implement event-type routing: deserialize JSON → check type → call correct projection handler</li>
+            <li>Implement <code>QueryController</code> with 3 GET endpoints</li>
+            <li>Test: full payment flow → query <code>GET /payments/{id}</code> → shows CONFIRMED</li>
+            <li>Test: failed payment → query shows CANCELLED with reason in audit log</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--query);border-color:rgba(234,179,8,.3);background:rgba(234,179,8,.06)">Projections</span>
+            <span class="svc-tag" style="color:var(--spring);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)">REST API</span>
+            <span class="svc-tag" style="color:#818cf8;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.06)">PostgreSQL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ NOTIFICATION SERVICE ═══ -->
+      <div class="svc-card">
+        <div class="svc-header">
+          <div class="svc-num">07</div>
+          <div>
+            <div class="svc-name">Notification Service</div>
+            <div class="svc-role">DOWNSTREAM ALERTS · WEBHOOK · DLT · RETRY · PORT :8085</div>
+          </div>
+          <div class="svc-accent" style="background:var(--outbox)"></div>
+        </div>
+        <div class="svc-body">
+          <p class="svc-desc">Subscribes to all final-state events. Fires webhook stubs (just logs for now). Implements retry with exponential backoff and Dead Letter Topic routing. Separate consumer group — failures here never block payment processing.</p>
+
+          <div class="svc-section-hdr">Package Structure</div>
+          <div class="code-block"><span class="pk">com.suresh.paymentsimulator.notification</span>
+├── consumer/
+│   └── <span class="kw">NotificationEventConsumer</span>  <span class="cm">// @KafkaListener — payment.events + risk.events + account.events</span>
+├── handler/
+│   ├── <span class="kw">SuccessNotificationHandler</span> <span class="cm">// PaymentConfirmedEvent → log + webhook stub</span>
+│   ├── <span class="kw">FailureNotificationHandler</span> <span class="cm">// PaymentCancelledEvent → log + failure alert</span>
+│   └── <span class="kw">WebhookClient</span>              <span class="cm">// HTTP client stub — just logs for now</span>
+├── config/
+│   ├── <span class="kw">KafkaConsumerConfig</span>        <span class="cm">// group: notification-service</span>
+│   └── <span class="kw">RetryConfig</span>                <span class="cm">// exponential backoff + DLT routing</span>
+└── <span class="st">NotificationServiceApplication</span></div>
+
+          <div class="svc-section-hdr">Events To Listen For</div>
+          <ul class="svc-items">
+            <li><code>PaymentConfirmedEvent</code> → log success, fire webhook stub</li>
+            <li><code>PaymentCancelledEvent</code> → log failure reason, fire failure alert</li>
+            <li><code>RiskRejectedEvent</code> → log risk rejection with rule detail</li>
+            <li><code>AccountDebitFailedEvent</code> → log insufficient funds</li>
+          </ul>
+
+          <div class="svc-section-hdr">Dead Letter Topic Configuration</div>
+          <div class="code-block"><span class="cm">// In KafkaConsumerConfig — Spring Kafka handles DLT automatically</span>
+<span class="kw">@Bean</span>
+public DefaultErrorHandler errorHandler(KafkaTemplate&lt;String, String&gt; template) {
+    DeadLetterPublishingRecoverer recoverer =
+        new DeadLetterPublishingRecoverer(template);
+    FixedBackOff backOff = new FixedBackOff(1000L, 3L); <span class="cm">// 3 retries, 1s apart</span>
+    <span class="st">return new</span> DefaultErrorHandler(recoverer, backOff);
+    <span class="cm">// After 3 failures → message goes to {topic}.DLT</span>
+    <span class="cm">// e.g. payment.events.DLT</span>
+}</div>
+
+          <div class="svc-section-hdr">Build Checklist</div>
+          <ul class="checklist">
+            <li>Create Spring Boot app on port 8085 — <strong>no database needed</strong></li>
+            <li>Create <code>@KafkaListener</code> on all event topics (group: <code>notification-service</code>)</li>
+            <li>Route events to appropriate handlers based on type</li>
+            <li>Implement webhook stub (just structured logging for now)</li>
+            <li>Configure <code>DefaultErrorHandler</code> with <code>DeadLetterPublishingRecoverer</code></li>
+            <li>Test: payment confirmed → success log appears</li>
+            <li>Test: force a processing error → message appears on <code>.DLT</code> topic after retries</li>
+          </ul>
+
+          <div class="svc-tags">
+            <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Webhook</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">DLT</span>
+            <span class="svc-tag" style="color:var(--event);border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.06)">Retry</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ FLOWS ═══ -->
+<div class="wrap" id="flows">
+  <section class="section">
+    <div class="section-label">06 — Transaction Flows</div>
+    <div class="section-title">Happy Path vs Failure Path</div>
+    <div class="section-desc">Both paths must be fully implemented and testable. The failure path is not an afterthought — it demonstrates the complete Saga compensation cycle.</div>
+
+    <div class="path-grid">
+
+      <div class="path-card ps-happy">
+        <div class="path-header">
+          <span class="ph-dot" style="background:var(--spring)"></span>
+          Happy Path — Successful Payment
+        </div>
+        <ul class="path-steps">
+          <li class="path-step"><span class="path-step-n">1</span><span>Client sends <code>POST /payments/initiate</code> with idempotency key</span><span class="path-event pe-happy">REST</span></li>
+          <li class="path-step"><span class="path-step-n">2</span><span>Gateway validates, issues <code>CreatePaymentCommand</code> to Axon</span><span class="path-event pe-happy">CMD</span></li>
+          <li class="path-step"><span class="path-step-n">3</span><span>PaymentAggregate emits <code>PaymentInitiatedEvent</code> to event store + outbox</span><span class="path-event pe-happy">EVENT</span></li>
+          <li class="path-step"><span class="path-step-n">4</span><span>Outbox relay publishes event to <code>payment.events</code> Kafka topic</span><span class="path-event pe-happy">KAFKA</span></li>
+          <li class="path-step"><span class="path-step-n">5</span><span>Risk Service consumes, runs rules, emits <code>RiskApprovedEvent</code></span><span class="path-event pe-happy">RISK ✓</span></li>
+          <li class="path-step"><span class="path-step-n">6</span><span>Account Service debits sender, emits <code>AccountDebitedEvent</code></span><span class="path-event pe-happy">DEBIT ✓</span></li>
+          <li class="path-step"><span class="path-step-n">7</span><span>Saga receives both events, sends <code>ConfirmPaymentCommand</code></span><span class="path-event pe-happy">SAGA</span></li>
+          <li class="path-step"><span class="path-step-n">8</span><span>Aggregate emits <code>PaymentConfirmedEvent</code>; Query Service updates projection</span><span class="path-event pe-happy">DONE</span></li>
+          <li class="path-step"><span class="path-step-n">9</span><span>Notification Service fires webhook. Client polls GET → <code>CONFIRMED</code></span><span class="path-event pe-happy">NOTIF</span></li>
+        </ul>
+      </div>
+
+      <div class="path-card ps-fail">
+        <div class="path-header">
+          <span class="ph-dot" style="background:var(--risk)"></span>
+          Failure Path — Insufficient Funds
+        </div>
+        <ul class="path-steps">
+          <li class="path-step"><span class="path-step-n">1</span><span>Steps 1–4 identical to happy path — payment initiated, published to Kafka</span><span class="path-event pe-fail">INIT</span></li>
+          <li class="path-step"><span class="path-step-n">2</span><span>Risk Service approves → <code>RiskApprovedEvent</code></span><span class="path-event pe-fail">RISK ✓</span></li>
+          <li class="path-step"><span class="path-step-n">3</span><span>Account Service checks balance — insufficient funds detected</span><span class="path-event pe-fail">CHECK</span></li>
+          <li class="path-step"><span class="path-step-n">4</span><span>Account Service emits <code>AccountDebitFailedEvent</code> with reason</span><span class="path-event pe-fail">FAIL</span></li>
+          <li class="path-step"><span class="path-step-n">5</span><span>Saga receives failure event, triggers compensation immediately</span><span class="path-event pe-fail">SAGA</span></li>
+          <li class="path-step"><span class="path-step-n">6</span><span>Saga sends <code>CancelPaymentCommand</code> with reason <code>INSUFFICIENT_FUNDS</code></span><span class="path-event pe-fail">COMP</span></li>
+          <li class="path-step"><span class="path-step-n">7</span><span>Aggregate emits <code>PaymentCancelledEvent</code>; projection updated to <code>CANCELLED</code></span><span class="path-event pe-fail">CANCEL</span></li>
+          <li class="path-step"><span class="path-step-n">8</span><span>Notification Service fires failure alert. Client polls → <code>CANCELLED</code></span><span class="path-event pe-fail">NOTIF</span></li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ PATTERNS ═══ -->
+<div class="wrap" id="patterns">
+  <section class="section">
+    <div class="section-label">07 — Interview-Ready Pattern Explanations</div>
+    <div class="section-title">Know These Cold</div>
+    <div class="section-desc">Each pattern solves a specific failure mode. When asked in an interview, explain: (1) the problem, (2) why simpler approaches fail, (3) how this pattern fixes it, (4) a concrete example from your project. 2 minutes max per pattern.</div>
+
+    <div class="patterns-grid">
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--event)"><span class="pat-dot" style="background:var(--event)"></span>Event Sourcing</div>
+        <p class="pat-desc"><strong>Problem:</strong> CRUD overwrites state. You can't reconstruct what happened. <strong>Solution:</strong> Store immutable events, not current state. Replay to rebuild. <strong>Your example:</strong> "PaymentAggregate state is reconstructed by replaying PaymentInitiatedEvent, then AccountDebitedEvent, then PaymentConfirmedEvent. If we need to debug why a payment failed, we have the complete event chain."</p>
+      </div>
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--outbox)"><span class="pat-dot" style="background:var(--outbox)"></span>Outbox Pattern</div>
+        <p class="pat-desc"><strong>Problem:</strong> DB write + Kafka publish = dual write. If crash between them, data diverges. <strong>Solution:</strong> Write DB + outbox in one ACID txn. Relay polls outbox → publishes to Kafka → marks published after ACK. <strong>Your example:</strong> "In my Mastercard project, we solved dual-write by using this pattern — the relay guarantees at-least-once delivery."</p>
+      </div>
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--saga)"><span class="pat-dot" style="background:var(--saga)"></span>Saga (Orchestration)</div>
+        <p class="pat-desc"><strong>Problem:</strong> Payment spans risk + account + notification. No distributed transaction. If account fails after risk approves, need rollback. <strong>Solution:</strong> Axon Saga tracks state. On failure → issues CancelPaymentCommand. <strong>Your example:</strong> "Saga watches for both RiskApprovedEvent and AccountDebitedEvent. Only when both arrive does it confirm. If either fails, it compensates."</p>
+      </div>
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--kafka)"><span class="pat-dot" style="background:var(--kafka)"></span>Idempotent Consumers</div>
+        <p class="pat-desc"><strong>Problem:</strong> Kafka at-least-once delivery means redelivery on crash. Double debit = real money lost. <strong>Solution:</strong> processed_events table. Check event ID before processing. Discard duplicates silently. <strong>Your example:</strong> "In Account Service, every event ID is stored. If Kafka redelivers after a consumer restart, the idempotency check prevents double-debit."</p>
+      </div>
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--axon)"><span class="pat-dot" style="background:var(--axon)"></span>CQRS</div>
+        <p class="pat-desc"><strong>Problem:</strong> Write model (transactional integrity) vs read model (fast queries) have different requirements. Sharing a model = neither is optimized. <strong>Solution:</strong> Commands go to Axon Aggregate. Queries hit denormalized PostgreSQL projections. <strong>Your example:</strong> "Query Service has zero joins — payment_summary is fully denormalized. Write throughput and read latency are independently scalable."</p>
+      </div>
+
+      <div class="pat-card">
+        <div class="pat-name" style="color:var(--risk)"><span class="pat-dot" style="background:var(--risk)"></span>Dead Letter Topic</div>
+        <p class="pat-desc"><strong>Problem:</strong> Poison pill messages (malformed, unprocessable) block the consumer partition forever. <strong>Solution:</strong> After N retries → route to {topic}.DLT. Inspect, fix, replay. <strong>Your example:</strong> "Notification Service uses Spring Kafka's DefaultErrorHandler with DeadLetterPublishingRecoverer. 3 retries with backoff, then DLT."</p>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ CONFIG ═══ -->
+<div class="wrap" id="config">
+  <section class="section">
+    <div class="section-label">08 — Kafka Configuration Reference</div>
+    <div class="section-title">Key Config Values — Know Why Each Exists</div>
+    <div class="section-desc">Every config value has a reason. If an interviewer asks "why is acks set to all?", you should be able to explain the tradeoff without hesitation.</div>
+
+    <div class="config-wrap">
+      <table class="config-table">
+        <thead>
+          <tr><th>Config Key</th><th>Value</th><th>Why — Explain This In Interviews</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>enable.idempotence</td><td>true</td><td>Producer won't duplicate messages on retry. Kafka assigns sequence numbers per partition. Required for exactly-once semantics.</td></tr>
+          <tr><td>transactional.id</td><td>payment-producer-1</td><td>Enables Kafka transactions. Epoch fencing prevents zombie producers after restart. Set a unique ID per producer instance.</td></tr>
+          <tr><td>acks</td><td>all</td><td>Leader + all ISR replicas must ACK before producer call returns. No data loss on leader failure. Tradeoff: slightly higher latency.</td></tr>
+          <tr><td>isolation.level</td><td>read_committed</td><td>Consumer skips uncommitted transactional messages. Prevents reading partial saga state from an in-progress transaction.</td></tr>
+          <tr><td>auto.offset.reset</td><td>earliest</td><td>New consumer group starts from beginning. Safe to replay all events to rebuild projections from scratch.</td></tr>
+          <tr><td>enable.auto.commit</td><td>false</td><td>Manual offset commit AFTER idempotency check + business logic. Prevents marking-consumed before processing is done.</td></tr>
+          <tr><td>max.in.flight.per.connection</td><td>5</td><td>Allows pipeline parallelism while idempotent producer preserves ordering within partition. Above 5 breaks ordering guarantee.</td></tr>
+          <tr><td>Outbox poll interval</td><td>200ms</td><td>Balance between latency (events published quickly) and DB load (not hammering PostgreSQL). Configurable per environment.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ TESTING ═══ -->
+<div class="wrap" id="testing">
+  <section class="section">
+    <div class="section-label">09 — Testing Strategy</div>
+    <div class="section-title">How To Test Each Service</div>
+    <div class="section-desc">Don't skip tests. This project's value to interviewers increases massively if you have real integration tests with Testcontainers, not just unit tests with mocks.</div>
+
+    <div class="impl-grid">
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--spring)"><span class="dot" style="background:var(--spring)"></span>Unit Tests</div>
+        <ul class="svc-items">
+          <li>Aggregate command handlers — use Axon's <code>AggregateTestFixture</code></li>
+          <li>Risk rules — each rule tested independently with edge cases</li>
+          <li>Service layer — Mockito mocks for repositories</li>
+          <li>Request validation — test bean validation annotations</li>
+        </ul>
+        <div class="code-block"><span class="cm">// Axon AggregateTestFixture example</span>
+fixture.givenNoPriorActivity()
+    .when(new <span class="ev">CreatePaymentCommand</span>(paymentId, ...))
+    .expectEvents(new <span class="ev">PaymentInitiatedEvent</span>(paymentId, ...));
+
+fixture.given(new <span class="ev">PaymentInitiatedEvent</span>(...))
+    .when(new <span class="ev">CancelPaymentCommand</span>(paymentId, "RISK_REJECTED"))
+    .expectEvents(new <span class="ev">PaymentCancelledEvent</span>(paymentId, ...));</div>
+      </div>
+
+      <div class="impl-box">
+        <div class="impl-box-title" style="color:var(--kafka)"><span class="dot" style="background:var(--kafka)"></span>Integration Tests (Testcontainers)</div>
+        <ul class="svc-items">
+          <li>Use <code>@Testcontainers</code> with <code>KafkaContainer</code> + <code>PostgreSQLContainer</code></li>
+          <li>Full end-to-end: POST payment → wait for Kafka events → verify projections</li>
+          <li>Test happy path and compensation (failure) path</li>
+          <li>Test idempotency: send same event twice → verify no double processing</li>
+          <li>Test DLT: poison pill message → verify it lands on DLT topic</li>
+        </ul>
+        <div class="code-block"><span class="cm">// Maven dependencies for integration tests</span>
+testcontainers (BOM)
+org.testcontainers:kafka
+org.testcontainers:postgresql
+org.testcontainers:junit-jupiter
+
+<span class="cm">// In test class</span>
+<span class="kw">@Container</span>
+static KafkaContainer kafka =
+    new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+<span class="kw">@Container</span>
+static PostgreSQLContainer&lt;?&gt; postgres =
+    new PostgreSQLContainer&lt;&gt;("postgres:16-alpine");</div>
+      </div>
+    </div>
+
+    <div class="svc-section-hdr" style="margin-top:20px">Test Checklist — Minimum Before Showing To Interviewers</div>
+    <ul class="checklist">
+      <li>PaymentAggregate unit tests using <code>AggregateTestFixture</code> — create, confirm, cancel</li>
+      <li>Risk rule unit tests — each rule edge case</li>
+      <li>Account debit unit test — success, insufficient funds, duplicate event</li>
+      <li>Integration: POST → Kafka → Risk → Account → Saga → Confirm → Query shows CONFIRMED</li>
+      <li>Integration: POST → Kafka → Risk → Account (insufficient) → Saga → Cancel → Query shows CANCELLED</li>
+      <li>Idempotency: send duplicate event → no double debit</li>
+      <li>Outbox: event published to Kafka only after DB commit</li>
+    </ul>
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══ DOCKER ═══ -->
+<div class="wrap" id="docker">
+  <section class="section">
+    <div class="section-label">10 — Docker Compose Reference</div>
+    <div class="section-title">Local Infrastructure Setup</div>
+    <div class="section-desc">Everything runs locally via Docker Compose. Create this file at the project root before building any service.</div>
+
+    <div class="code-block" style="font-size:10px;line-height:1.8"><span class="cm"># docker-compose.yml</span>
+version: '<span class="st">3.8</span>'
+services:
+
+  <span class="kw">zookeeper</span>:
+    image: confluentinc/cp-zookeeper:7.5.0
+    ports: ["<span class="hl">2181</span>:2181"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  <span class="kw">kafka</span>:
+    image: confluentinc/cp-kafka:7.5.0
+    ports: ["<span class="hl">9092</span>:9092"]
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  <span class="kw">axon-server</span>:
+    image: axoniq/axonserver:2024.1.2
+    ports:
+      - "<span class="hl">8024</span>:8024"   <span class="cm"># Dashboard</span>
+      - "<span class="hl">8124</span>:8124"   <span class="cm"># gRPC</span>
+
+  <span class="kw">postgres-payment</span>:
+    image: postgres:16-alpine
+    ports: ["<span class="hl">5432</span>:5432"]
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  <span class="kw">postgres-account</span>:
+    image: postgres:16-alpine
+    ports: ["<span class="hl">5433</span>:5432"]
+    environment:
+      POSTGRES_DB: account_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  <span class="kw">postgres-query</span>:
+    image: postgres:16-alpine
+    ports: ["<span class="hl">5434</span>:5432"]
+    environment:
+      POSTGRES_DB: query_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres</div>
+
+    <div class="alert-box alert-success" style="margin-top:16px">
+      <strong>Verify:</strong> Run <code>docker compose up -d</code>, then check: (1) <code>localhost:8024</code> for Axon Server dashboard, (2) <code>psql -h localhost -p 5432 -U postgres -d payment_db</code> connects, (3) Kafka is reachable on 9092. All 6 containers must be healthy before you start building services.
+    </div>
+
+    <div style="margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 22px;">
+      <div class="svc-section-hdr" style="margin-top:0">Service Port Map</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--spring);font-weight:700;margin-bottom:2px">api-gateway</div>
+          <div style="color:var(--muted)">:8080</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--axon);font-weight:700;margin-bottom:2px">payment-service</div>
+          <div style="color:var(--muted)">:8081</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--risk);font-weight:700;margin-bottom:2px">risk-service</div>
+          <div style="color:var(--muted)">:8082</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--event);font-weight:700;margin-bottom:2px">account-service</div>
+          <div style="color:var(--muted)">:8083</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--query);font-weight:700;margin-bottom:2px">query-service</div>
+          <div style="color:var(--muted)">:8084</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--outbox);font-weight:700;margin-bottom:2px">notification-service</div>
+          <div style="color:var(--muted)">:8085</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;">
+          <div style="color:var(--saga);font-weight:700;margin-bottom:2px">saga-service</div>
+          <div style="color:var(--muted)">:8086</div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+<div class="divider"></div>
+
+<div class="wrap">
+  <footer class="footer">
+    <div class="footer-left">personal build guide · not for repo · distributed-payment-simulator</div>
+    <div class="footer-right">
+      <span class="footer-badge">CQRS</span>
+      <span class="footer-badge">EVENT SOURCING</span>
+      <span class="footer-badge">SAGA</span>
+      <span class="footer-badge">OUTBOX</span>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>
