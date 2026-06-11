@@ -1,25 +1,38 @@
 # Distributed Payment Processing Platform
 
-> ⚠️ Educational project inspired by real-world payment systems. It is not intended for production financial transactions.
-
-A production-inspired event-driven payment processing platform built using Java, Spring Boot, Apache Kafka, PostgreSQL, CQRS, Event Sourcing, Saga Pattern, and Outbox Pattern.
-
-This project simulates how modern financial systems process payments while maintaining consistency, fault tolerance, reliability, and scalability across distributed services.
+> An event-driven microservices system that simulates real-world payment processing pipelines — built from first-hand experience working on Mastercard's payment transfer platform and Axis Bank's lending systems.
 
 ---
 
-## Overview
+## Why This Project Exists
 
-The platform models the complete lifecycle of a payment transaction:
+Most backend portfolio projects demonstrate CRUD operations with a REST API and a database. That's not what payment systems look like in production.
 
-1. Payment Initiation
-2. Fraud Screening
-3. Account Debit Processing
-4. Transaction Confirmation
-5. Read Model Projection
-6. Notification Delivery
+After spending 3+ years building payment transfers, loan processing, and API integrations at **Mastercard** and **Axis Bank** — supporting **500,000+ daily transactions** across multiple regions — I built this project to demonstrate the distributed systems patterns I've worked with at scale, in a form I can openly share.
 
-The system is fully asynchronous and event-driven using Apache Kafka.
+At Mastercard, I worked on a **Unified Payment API** handling both domestic and cross-border transfers. At Axis Bank, I built loan management microservices that integrate with external verification workflows. In both environments, the hard problems weren't "how do you build a REST endpoint" — they were:
+
+- **How do you process a payment across 4 services without losing data if one crashes mid-transaction?**
+- **How do you prevent a customer from being charged twice when Kafka redelivers a message?**
+- **How do you split read and write workloads so query traffic doesn't throttle payment processing?**
+- **How do you roll back a partially completed payment when the account service reports insufficient funds?**
+
+This project answers those questions with working code.
+
+---
+
+## What It Simulates
+
+The platform models the **full lifecycle of a payment transaction** — from initiation through fraud screening, account debit, ledger posting, and notification — using patterns drawn from production fintech systems:
+
+1. **Payment Initiation** — Client submits a payment request with an idempotency key
+2. **Fraud Screening** — Risk service evaluates velocity rules, amount thresholds, and blocklists
+3. **Account Debit** — Account service checks balance and debits the sender
+4. **Transaction Confirmation** — Saga orchestrator confirms the payment after all steps succeed
+5. **Read Model Projection** — Query service updates denormalized views for fast polling
+6. **Notification Delivery** — Notification service fires webhooks and logs event outcomes
+
+The entire flow is **asynchronous and event-driven**. After the API Gateway accepts a request, every downstream step communicates through Apache Kafka. No synchronous inter-service REST calls.
 
 ---
 
@@ -29,543 +42,384 @@ The system is fully asynchronous and event-driven using Apache Kafka.
                            ┌─────────────┐
                            │   Client    │
                            └──────┬──────┘
-                                  │
+                                  │ POST /payments/initiate
                                   ▼
                        ┌─────────────────────┐
-                       │    API Gateway      │
+                       │    API Gateway       │
+                       │  Validation · Auth   │
+                       │  Idempotency Cache   │
                        └─────────┬───────────┘
-                                 │
+                                 │ CreatePaymentCommand
                                  ▼
                   ┌────────────────────────────┐
-                  │ Payment Command Service    │
-                  │ CQRS + Event Sourcing      │
-                  │ Outbox Pattern             │
+                  │   Payment Service          │
+                  │   Axon Aggregate · CQRS    │
+                  │   Event Sourcing · Outbox  │
                   └────────────┬───────────────┘
-                               │
+                               │ PaymentInitiatedEvent
                                ▼
 
-══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════
                     APACHE KAFKA
-══════════════════════════════════════════════════════
+  Topics: payment.events · account.events · risk.events
+═══════════════════════════════════════════════════════
 
-        │                 │                 │
-        ▼                 ▼                 ▼
+        │                │                │                │
+        ▼                ▼                ▼                ▼
 
-┌──────────────┐ ┌──────────────┐ ┌─────────────────┐
-│ Risk Service │ │Account Svc   │ │Notification Svc │
-└──────┬───────┘ └──────┬───────┘ └─────────────────┘
+┌──────────────┐ ┌──────────────┐ ┌────────────────┐ ┌───────────────┐
+│ Risk Service │ │Account Svc   │ │Notification Svc│ │ Query Service │
+│ Fraud Rules  │ │Debit/Credit  │ │Webhook · DLT   │ │ Projections   │
+└──────┬───────┘ └──────┬───────┘ └────────────────┘ └───────────────┘
        │                │
        └──────┬─────────┘
               ▼
 
-      ┌───────────────────┐
-      │ Payment Saga Svc  │
-      └─────────┬─────────┘
-                │
-                ▼
-
-      ┌───────────────────┐
-      │ Query Service     │
-      │ Read Model        │
-      └───────────────────┘
+  ┌──────────────────────────────────────────────────┐
+  │         Axon Saga Orchestrator                   │
+  │  Coordinates multi-step distributed transactions │
+  │  Issues compensating commands on failure         │
+  └──────────────────────────────────────────────────┘
 ```
 
----
-
-# Tech Stack
-
-| Category | Technology |
-|-----------|-----------|
-| Language | Java 17 |
-| Framework | Spring Boot 3 |
-| Messaging | Apache Kafka |
-| Database | PostgreSQL |
-| CQRS/Event Sourcing | Axon Framework |
-| Containerization | Docker |
-| Build Tool | Maven |
-| API Documentation | OpenAPI / Swagger |
-| Testing | JUnit 5, Mockito, Testcontainers |
+**Key architectural decisions:**
+- Each service **owns its own database** — no shared schemas, no cross-service queries
+- All inter-service communication flows through **Kafka topics** — services are producers and consumers
+- The **Outbox Pattern** eliminates dual-write failures between the database and Kafka
+- The **Saga Orchestrator** manages distributed transactions without distributed locks
 
 ---
 
-# Core Concepts Demonstrated
+## Tech Stack
 
-## CQRS
-
-Commands and Queries are completely separated.
-
-### Command Side
-
-- Create Payment
-- Confirm Payment
-- Cancel Payment
-
-### Query Side
-
-- Payment Status
-- Transaction History
-- Account Balance
-- Audit Logs
+| Category | Technology | Why |
+|----------|-----------|-----|
+| Language | Java 17 | Production standard across Mastercard, Axis Bank, and most fintech backends |
+| Framework | Spring Boot 3 | Ecosystem for Kafka, JPA, Actuator, and Axon integration |
+| CQRS / Event Sourcing | Axon Framework | Separates command and query models with built-in Saga orchestration |
+| Messaging | Apache Kafka | Backbone for all async inter-service communication — used in production at Mastercard |
+| Database | PostgreSQL | Each service has its own schema — `payment_db`, `account_db`, `query_db` |
+| Containerization | Docker Compose | Full local stack: Kafka, Zookeeper, Axon Server, 3 PostgreSQL instances |
+| Build Tool | Maven | Multi-module project structure |
+| Testing | JUnit 5, Mockito, Testcontainers | Integration tests with real Kafka + PostgreSQL containers |
+| API Docs | OpenAPI / Swagger | Auto-generated from annotations |
 
 ---
 
-## Event Sourcing
+## Core Patterns — And Why Each One Matters
 
-All state transitions are persisted as immutable domain events.
+These patterns aren't used for demonstration purposes alone. Each one solves a specific failure mode I've encountered in production payment systems.
 
-Example:
+### CQRS (Command Query Responsibility Segregation)
 
-```text
-PaymentInitiatedEvent
-RiskApprovedEvent
-AccountDebitedEvent
-PaymentConfirmedEvent
-```
+**The problem:** In a payment system, write throughput (processing transactions) and read throughput (status polling, dashboards, audits) have completely different scaling characteristics. If they share a model, read-heavy traffic degrades payment processing.
 
-Current state can be reconstructed by replaying events.
-
----
-
-## Saga Pattern
-
-Coordinates distributed transactions across multiple services.
-
-### Success Flow
-
-```text
-Payment Initiated
-       ↓
-Risk Approved
-       ↓
-Account Debited
-       ↓
-Payment Confirmed
-```
-
-### Failure Flow
-
-```text
-Payment Initiated
-       ↓
-Risk Approved
-       ↓
-Insufficient Funds
-       ↓
-Compensation Triggered
-       ↓
-Payment Cancelled
-```
-
----
-
-## Outbox Pattern
-
-Prevents dual-write failures.
-
-Instead of:
-
-```text
-Write Database
-Publish Kafka Event
-```
-
-The service performs:
-
-```text
-Write Database
-Write Outbox Event
-Commit Transaction
-```
-
-A dedicated Outbox Publisher later publishes events to Kafka.
-
----
-
-## Idempotency
-
-Prevents duplicate processing.
-
-Implemented using:
-
-- Idempotency Keys
-- Kafka Producer Idempotence
-- Processed Event Tracking
-- Database Constraints
-
----
-
-# Microservices
-
-## API Gateway
-
-### Responsibilities
-
-- Authentication
-- Request Validation
-- Rate Limiting
-- Idempotency Validation
-
-### Endpoints
-
-```http
-POST /api/v1/payments
-GET  /api/v1/payments/{id}
-GET  /api/v1/accounts/{id}/balance
-```
-
----
-
-## Payment Command Service
-
-Core write model of the platform.
-
-### Responsibilities
-
-- Command Handling
-- Aggregate Management
-- Event Storage
-- Outbox Publishing
-
-### Commands
+**The solution:** Commands (`CreatePaymentCommand`, `ConfirmPaymentCommand`, `CancelPaymentCommand`) are handled by Axon Aggregates that enforce business invariants and emit domain events. Queries read from **denormalized projection tables** — zero joins, sub-millisecond reads, completely decoupled from write throughput.
 
 ```java
-CreatePaymentCommand
-ConfirmPaymentCommand
-CancelPaymentCommand
+// Write side — enforces invariants, emits events
+@CommandHandler
+void handle(CreatePaymentCommand cmd) {
+    // validate, then:
+    AggregateLifecycle.apply(new PaymentInitiatedEvent(...));
+}
+
+// Read side — separate service, separate DB
+@QueryHandler
+PaymentDTO handle(FindPaymentQuery query) {
+    return projectionRepository.findById(query.getPaymentId());
+}
 ```
 
-### Events
+### Event Sourcing
+
+**The problem:** Traditional CRUD overwrites state. When a payment goes wrong, you can't reconstruct what happened — you only know the final state.
+
+**The solution:** All state transitions are persisted as **immutable domain events**. The aggregate's current state is reconstructed by replaying events. Projections can be rebuilt from scratch at any time — no data is ever lost.
+
+```
+PaymentInitiatedEvent  →  RiskApprovedEvent  →  AccountDebitedEvent  →  PaymentConfirmedEvent
+```
+
+### Saga Pattern (Orchestration)
+
+**The problem:** A payment touches multiple services (risk, account, notification). There's no distributed transaction manager. If the account debit fails after risk approval, you need to undo the payment — without a distributed lock.
+
+**The solution:** The Axon Saga tracks the multi-step flow. On any failure, it issues **compensating commands** to undo committed steps:
 
 ```java
-PaymentInitiatedEvent
-PaymentConfirmedEvent
-PaymentCancelledEvent
+@SagaEventHandler
+void on(AccountDebitFailedEvent event) {
+    // Risk already approved, but funds insufficient — compensate
+    commandGateway.send(new CancelPaymentCommand(
+        event.getPaymentId(), "INSUFFICIENT_FUNDS"
+    ));
+}
+```
+
+### Outbox Pattern
+
+**The problem:** After processing a payment, the service needs to (1) update its database and (2) publish an event to Kafka. If the service crashes between these two steps, data and events diverge. This is the **dual-write problem**.
+
+**The solution:** The Payment Service writes its domain event **and** an outbox record in a **single ACID transaction**. A relay process polls the outbox table and publishes to Kafka — only marking rows as published after receiving Kafka's ACK.
+
+```sql
+-- Single atomic transaction
+BEGIN;
+  INSERT INTO payments (...) VALUES (...);
+  INSERT INTO outbox_events (payload, published) VALUES (:event, false);
+COMMIT;
+-- Relay polls unpublished rows → publishes to Kafka → marks published
+```
+
+### Idempotent Consumers
+
+**The problem:** Kafka guarantees at-least-once delivery. If a consumer crashes after processing a message but before committing its offset, the message will be redelivered. A payment could be debited twice.
+
+**The solution:** Each service stores processed event IDs in PostgreSQL. Duplicate events are discarded before any business logic executes:
+
+```java
+if (processedEventRepo.existsById(event.getId())) {
+    return; // already handled — skip silently
+}
+// process + insert ID atomically
+```
+
+### Dead Letter Topic (DLT)
+
+**The problem:** Some messages will always fail — malformed payloads, unavailable dependencies, bugs. Without a safety net, they block the consumer partition forever.
+
+**The solution:** Messages that fail after max retries are routed to a Dead Letter Topic for inspection, replay, and root-cause analysis — without losing events permanently.
+
+---
+
+## Microservices Breakdown
+
+### 01 · API Gateway
+**Entry Point · REST · Request Validation**
+
+Single external entry point. Validates input, checks the idempotency key (returns cached response if duplicate), and forwards `CreatePaymentCommand` to the Payment Service via Axon's CommandGateway. Returns `202 Accepted` with a payment ID for async polling. No business logic lives here.
+
+**Endpoint:** `POST /payments/initiate`
+
+---
+
+### 02 · Payment Service
+**Core Write Model · CQRS · Event Sourcing · Outbox**
+
+The heart of the system. Manages the `PaymentAggregate` via Axon. All state changes produce domain events persisted to Axon's event store. The Outbox relay handles publishing to Kafka without dual-write risk.
+
+**Commands:** `CreatePaymentCommand` → `ConfirmPaymentCommand` → `CancelPaymentCommand`
+**Events:** `PaymentInitiatedEvent` → `PaymentConfirmedEvent` / `PaymentCancelledEvent`
+
+---
+
+### 03 · Account Service
+**Balance Management · Debit / Credit · Idempotent**
+
+Consumes `PaymentInitiatedEvent` from Kafka and attempts to debit the sender account. Publishes the result as a new event. Uses optimistic locking and processed-event tracking to prevent double-debit on redelivery.
+
+**Events:** `AccountDebitedEvent` / `AccountDebitFailedEvent`
+
+---
+
+### 04 · Risk Service
+**Fraud Detection · Rule Engine · Async Screening**
+
+Screens every payment against configurable fraud rules before account debit is allowed:
+- Velocity check (> N transactions per minute from same sender)
+- Amount threshold (single payment above configurable limit)
+- Blocklist check (sender or receiver on block list)
+- Currency mismatch between sender and receiver
+
+**Events:** `RiskApprovedEvent` / `RiskRejectedEvent`
+
+---
+
+### 05 · Notification Service
+**Downstream Alerts · Webhook · Event Log**
+
+Subscribes to all final-state events (`PaymentConfirmedEvent`, `PaymentCancelledEvent`, `RiskRejectedEvent`, `AccountDebitFailedEvent`). Fully async and independently scalable — designed to be slow without blocking payment processing. Uses exponential backoff retry and Dead Letter Topic for permanently failing notifications.
+
+---
+
+### 06 · Query Service
+**Read Model · Projections · REST Queries**
+
+Maintains denormalized projection tables by consuming events from Kafka. Completely decoupled from the write model — can be rebuilt from the event log at any time.
+
+**Projections:** `payment_summary` · `account_balance_view` · `payment_audit_log`
+
+**Endpoints:**
+```
+GET /payments/{id}           → current status + event trail
+GET /accounts/{id}/balance   → latest projected balance
+GET /payments?status=FAILED  → filtered query with pagination
 ```
 
 ---
 
-## Risk Service
+## Transaction Flows
 
-Fraud detection and transaction validation.
+### ✅ Happy Path — Successful Payment
 
-### Checks
+| Step | Action | Output |
+|------|--------|--------|
+| 1 | Client sends `POST /payments/initiate` with idempotency key | REST |
+| 2 | Gateway validates, issues `CreatePaymentCommand` to Axon | CMD |
+| 3 | PaymentAggregate emits `PaymentInitiatedEvent` to event store + outbox | EVENT |
+| 4 | Outbox relay publishes event to `payment.events` Kafka topic | KAFKA |
+| 5 | Risk Service consumes, runs rules, emits `RiskApprovedEvent` | RISK ✓ |
+| 6 | Account Service debits sender, emits `AccountDebitedEvent` | DEBIT ✓ |
+| 7 | Saga receives both events, sends `ConfirmPaymentCommand` | SAGA |
+| 8 | Aggregate emits `PaymentConfirmedEvent`; Query Service updates projection | DONE |
+| 9 | Notification Service fires webhook. Client polls GET → `CONFIRMED` | NOTIF |
 
-- Velocity Rules
-- Transaction Limits
-- Block Lists
-- Currency Validation
+### ❌ Failure Path — Insufficient Funds
 
-### Events
+| Step | Action | Output |
+|------|--------|--------|
+| 1 | Steps 1–4 identical — payment initiated, published to Kafka | INIT |
+| 2 | Risk Service approves → `RiskApprovedEvent` | RISK ✓ |
+| 3 | Account Service checks balance — insufficient funds | CHECK |
+| 4 | Account Service emits `AccountDebitFailedEvent` with reason | FAIL |
+| 5 | Saga receives failure, triggers compensation | SAGA |
+| 6 | Saga sends `CancelPaymentCommand` with reason `INSUFFICIENT_FUNDS` | COMP |
+| 7 | Aggregate emits `PaymentCancelledEvent`; projection updated to `CANCELLED` | CANCEL |
+| 8 | Notification Service fires failure alert. Client polls → `CANCELLED` | NOTIF |
 
-```java
-RiskApprovedEvent
-RiskRejectedEvent
-```
-
----
-
-## Account Service
-
-Account balance management.
-
-### Responsibilities
-
-- Debit Account
-- Credit Account
-- Balance Validation
-- Idempotent Event Processing
-
-### Events
-
-```java
-AccountDebitedEvent
-AccountDebitFailedEvent
-```
+> Both paths are fully implemented and testable. The failure path demonstrates the complete Saga compensation cycle — not an afterthought.
 
 ---
 
-## Payment Saga Service
+## Kafka Configuration
 
-Orchestrates distributed transactions.
-
-### Responsibilities
-
-- Saga State Management
-- Compensation Logic
-- Event Coordination
-
-### Example Compensation
-
-```java
-CancelPaymentCommand
-```
-
-Triggered when:
-
-```java
-AccountDebitFailedEvent
-```
-
-is received.
+| Config Key | Value | Why |
+|------------|-------|-----|
+| `enable.idempotence` | `true` | Producer won't duplicate messages on retry. Required for exactly-once semantics |
+| `transactional.id` | `payment-producer-1` | Enables Kafka transactions. Epoch fencing prevents zombie producers |
+| `acks` | `all` | All ISR replicas must ACK. No data loss on leader failure |
+| `isolation.level` | `read_committed` | Consumer skips uncommitted transactional messages |
+| `auto.offset.reset` | `earliest` | New consumer groups start from beginning — safe for projection rebuild |
+| `enable.auto.commit` | `false` | Manual commit after idempotency check + business logic |
+| `max.in.flight.per.connection` | `5` | Pipeline parallelism while idempotent producer preserves ordering |
+| Outbox poll interval | `200ms` | Balance between latency and DB load |
 
 ---
 
-## Query Service
+## Infrastructure (Docker Compose)
 
-Maintains denormalized read models.
+| Service | Port | Purpose |
+|---------|------|---------|
+| `kafka` | 9092 | Event bus for all inter-service communication |
+| `zookeeper` | 2181 | Kafka cluster coordination |
+| `axon-server` | 8024 / 8124 | Event store + command routing |
+| `postgres-payment` | 5432 | Payment service database (`payment_db`) |
+| `postgres-account` | 5433 | Account service database (`account_db`) |
+| `postgres-query` | 5434 | Query service projections (`query_db`) |
 
-### Projection Tables
+---
+
+## Repository Structure
 
 ```text
-payment_summary
-account_balance_view
-payment_audit_log
-```
-
-### Endpoints
-
-```http
-GET /api/v1/payments/{id}
-GET /api/v1/accounts/{id}/balance
-GET /api/v1/payments?status=FAILED
-```
-
----
-
-## Notification Service
-
-Handles asynchronous notifications.
-
-### Responsibilities
-
-- Success Notifications
-- Failure Notifications
-- Webhook Delivery
-- Retry Handling
-- Dead Letter Processing
-
----
-
-# Kafka Topics
-
-```text
-payment.initiated
-
-risk.approved
-risk.rejected
-
-account.debited
-account.debit.failed
-
-payment.confirmed
-payment.cancelled
-
-notification.events
-```
-
----
-
-# Repository Structure
-
-```text
-distributed-payment-processing-platform
-
-├── common-lib
+distributed-payment-processing-platform/
 │
-├── infrastructure
-│   ├── docker-compose
-│   ├── kafka
-│   └── postgres
+├── api-gateway/              # REST entry point, validation, idempotency
+├── payment-service/          # CQRS write model, Axon aggregates, outbox
+├── common-service/           # Shared DTOs, events, commands
 │
-├── api-gateway-service
-├── payment-command-service
-├── account-service
-├── risk-service
-├── payment-saga-service
-├── payment-query-service
-├── notification-service
-│
-└── docs
+├── docker-compose.yml        # Full local infrastructure
+└── README.md
+```
+
+**Planned additions:**
+```text
+├── account-service/          # Balance management, debit/credit
+├── risk-service/             # Fraud detection, rule engine
+├── notification-service/     # Webhooks, DLT, retry logic
+├── query-service/            # Read model, projections
+├── payment-saga-service/     # Saga orchestrator, compensation
+└── infrastructure/           # Kafka config, PostgreSQL schemas
 ```
 
 ---
 
-# Package Structure
+## Package Structure
 
-```java
+```
 com.suresh.paymentsimulator
-```
-
-Example:
-
-```text
-com.suresh.paymentsimulator.payment.aggregate
-com.suresh.paymentsimulator.payment.command
-com.suresh.paymentsimulator.payment.event
-
-com.suresh.paymentsimulator.account.consumer
-
-com.suresh.paymentsimulator.risk.rules
-
-com.suresh.paymentsimulator.query.projection
+├── payment.aggregate         # Axon aggregates, command handlers
+├── payment.command           # Command definitions
+├── payment.event             # Domain event definitions
+├── payment.outbox            # Outbox table + relay/poller
+├── account.consumer          # Kafka consumer, debit logic
+├── risk.rules                # Fraud rule engine
+├── query.projection          # Event handlers, projection tables
+└── notification.handler      # Webhook delivery, DLT routing
 ```
 
 ---
 
-# Database Ownership
+## Local Development
 
-Each service owns its database.
-
-```text
-payment_db
-account_db
-risk_db
-query_db
-notification_db
-saga_db
-```
-
-No service accesses another service's database directly.
-
----
-
-# Example Transaction Flow
-
-## Success Scenario
-
-```text
-PaymentInitiatedEvent
-        ↓
-RiskApprovedEvent
-        ↓
-AccountDebitedEvent
-        ↓
-PaymentConfirmedEvent
-        ↓
-NotificationSent
-```
-
-## Failure Scenario
-
-```text
-PaymentInitiatedEvent
-        ↓
-RiskApprovedEvent
-        ↓
-AccountDebitFailedEvent
-        ↓
-CancelPaymentCommand
-        ↓
-PaymentCancelledEvent
-```
-
----
-
-# Local Development Setup
-
-## Prerequisites
+### Prerequisites
 
 - Java 17+
 - Maven 3.9+
-- Docker
-- Docker Compose
+- Docker & Docker Compose
 
-## Clone Repository
+### Quick Start
 
 ```bash
-git clone https://github.com/<your-github-username>/distributed-payment-processing-platform.git
-
+# Clone
+git clone https://github.com/sureshchidella/distributed-payment-processing-platform.git
 cd distributed-payment-processing-platform
-```
 
-## Start Infrastructure
-
-```bash
+# Start infrastructure (Kafka, PostgreSQL, Axon Server)
 docker compose up -d
-```
 
-This starts:
-
-- Apache Kafka
-- Zookeeper
-- PostgreSQL
-- Axon Server (Optional)
-
-## Build
-
-```bash
+# Build
 mvn clean install
-```
 
-## Run Services
-
-```bash
+# Run services
 mvn spring-boot:run
 ```
 
-or
+---
 
-```bash
-docker compose up
-```
+## Future Enhancements
+
+- **Ledger Service** — Double-entry accounting (debit Account A, credit Account B)
+- **Multi-Currency Support** — Currency conversion with exchange rate service
+- **Redis Caching** — Idempotency key cache, balance lookups
+- **Prometheus + Grafana** — Payment latency histograms, request rate dashboards
+- **Distributed Tracing** — Zipkin/Jaeger traces across the full payment flow
+- **Kubernetes Deployment** — Helm charts for production-like deployment
+- **Schema Registry** — Avro serialization with backward/forward compatibility
+- **Event Replay Console** — Rebuild projections from event store on demand
 
 ---
 
-# Future Enhancements
+## What This Project Demonstrates
 
-## Ledger Service
+This isn't a tutorial project. It's a working demonstration of the patterns backend engineers encounter in **real financial systems**:
 
-Implement double-entry accounting.
+| Concept | Implementation |
+|---------|---------------|
+| Distributed Transactions | Saga orchestration with compensating commands |
+| Event Consistency | Event Sourcing via Axon — immutable, replayable |
+| Reliable Messaging | Outbox pattern eliminates dual-write failures |
+| Exactly-Once Processing | Idempotent producers + consumer event tracking |
+| Failure Recovery | Full compensation cycle on any step failure |
+| Read/Write Separation | CQRS with independent projection databases |
+| Fault Tolerance | Dead Letter Topics, circuit breakers, retry policies |
+| Auditability | Complete event trail per payment — every state transition recorded |
 
-```text
-Debit Account A
-Credit Account B
-```
-
-Every transaction produces balanced ledger entries.
-
-## Additional Enhancements
-
-- Multi-Currency Support
-- Redis Caching
-- Prometheus Metrics
-- Grafana Dashboards
-- Distributed Tracing
-- Kubernetes Deployment
-- Schema Registry
-- Avro Serialization
-- Event Replay Console
+The goal: demonstrate backend engineering depth expected in modern payment and banking systems — not just that I can build an API, but that I understand what happens when things fail at scale.
 
 ---
 
-# What This Project Demonstrates
-
-- Event-Driven Architecture
-- Distributed Systems
-- Microservices
-- Apache Kafka
-- CQRS
-- Event Sourcing
-- Saga Pattern
-- Outbox Pattern
-- Idempotent Processing
-- Fault Tolerance
-- Payment Processing Workflows
-- Production-Style Backend Design
-
----
-
-# Why This Project Exists
-
-Most portfolio projects stop at CRUD operations.
-
-This platform focuses on the problems backend engineers encounter in real financial systems:
-
-- Distributed Transactions
-- Event Consistency
-- Reliable Messaging
-- Failure Recovery
-- Scalability
-- Auditability
-
-The goal is to demonstrate backend engineering skills expected in modern payment and banking systems.
+<p align="center">
+  <sub>Built by <a href="https://github.com/sureshchidella">Suresh Chidella</a> · Java 17 · Spring Boot 3 · Apache Kafka · Axon Framework · PostgreSQL</sub>
+</p>
