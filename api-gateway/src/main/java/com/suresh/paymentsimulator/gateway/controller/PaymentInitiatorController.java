@@ -5,7 +5,6 @@ import com.suresh.paymentsimulator.gateway.request.InitiatePaymentRequest;
 import com.suresh.paymentsimulator.gateway.response.InitiatePaymentResponse;
 import com.suresh.paymentsimulator.gateway.service.TransactionCacheService;
 import com.suresh.paymentsimulator.common.dto.ApiResponse;
-import com.suresh.paymentsimulator.common.entity.Transaction;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,17 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping(value = UrlMappingConstants.PAYMENTS)
 public class PaymentInitiatorController {
 
-    private final TransactionCacheService transactionCacheService;
-
-    /**
-     * Constructs a new PaymentInitiatorController.
-     *
-     * @param transactionCacheService service for tiered cache transaction lookups
-     */
-    public PaymentInitiatorController(TransactionCacheService transactionCacheService) {
-        this.transactionCacheService = transactionCacheService;
-    }
-
     /**
      * Initiates a new payment transaction.
      * If Repeat-Flag header is true, performs a tiered cache lookup
@@ -48,12 +36,7 @@ public class PaymentInitiatorController {
             @RequestBody InitiatePaymentRequest initiatePaymentRequest,
             @RequestHeader(value = "Repeat-Flag", required = false, defaultValue = "false") boolean repeatFlag) {
 
-        if (repeatFlag) {
-            String paymentReference = initiatePaymentRequest.getPaymentReference();
-            transactionCacheService.getTransaction(paymentReference)
-                    .ifPresent(transaction -> {
-                    });
-        }
+
 
         return ResponseEntity.accepted().body(new ApiResponse<>());
     }

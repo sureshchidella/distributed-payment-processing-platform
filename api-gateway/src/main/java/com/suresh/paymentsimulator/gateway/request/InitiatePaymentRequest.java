@@ -41,7 +41,7 @@ public class InitiatePaymentRequest {
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "1.00", message = "Minimum amount is ₹1")
     @Digits(integer = 10, fraction = 2, message = "Amount can have up to 2 decimal places")
-    private Integer amount;
+    private Double amount;
 
     /**
      * ISO 4217 currency code (e.g., "INR", "USD", "EUR").

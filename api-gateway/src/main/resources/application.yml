@@ -14,7 +14,7 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
@@ -23,16 +23,23 @@ spring:
   redis:
     host: localhost
     port: 6379
-    timeout: 2000
+    password: RedisCache2026
+    timeout: 10s
+  data:
+    redis:
+      repositories:
+        enabled: false
   cache:
     type: caffeine
     caffeine:
       spec: maximumSize=500,expireAfterWrite=10s
+app:
+  cache:
+    local:
+      maximum-size: 10000
+      expire-after-write: 30m
+  redis:
+    shutdown-timeout: 15s
 
 server:
   port: 8080
-
-logging:
-  level:
-    com.suresh.paymentsimulator: DEBUG
-    org.springframework.cache: DEBUG

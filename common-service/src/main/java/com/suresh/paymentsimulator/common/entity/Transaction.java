@@ -13,6 +13,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -27,7 +29,10 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Transaction {
+public class Transaction implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * Unique payment reference identifier (primary key).
@@ -36,6 +41,9 @@ public class Transaction {
     @Id
     @Column(name = "payment_reference", nullable = false, length = 36)
     private String paymentReference;
+
+    @Column(name = "id", nullable = false)
+    private String id;
 
     /**
      * Transaction amount in minor units (e.g., paise for INR).
@@ -71,11 +79,8 @@ public class Transaction {
     @Column(name = "sender_bank_code", length = 11)
     private String senderBankCode;
 
-    @Column(name = "sender_address_line1", length = 200)
-    private String senderAddressLine1;
-
-    @Column(name = "sender_address_line2", length = 200)
-    private String senderAddressLine2;
+    @Column(name = "sender_street", length = 200)
+    private String senderStreet;
 
     @Column(name = "sender_city", length = 100)
     private String senderCity;
@@ -96,11 +101,8 @@ public class Transaction {
     @Column(name = "recipient_bank_code", length = 11)
     private String recipientBankCode;
 
-    @Column(name = "recipient_address_line1", length = 200)
-    private String recipientAddressLine1;
-
-    @Column(name = "recipient_address_line2", length = 200)
-    private String recipientAddressLine2;
+    @Column(name = "recipient_street", length = 200)
+    private String recipientStreet;
 
     @Column(name = "recipient_city", length = 100)
     private String recipientCity;

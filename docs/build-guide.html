@@ -497,13 +497,13 @@ nav {
     <p class="hero-sub">
       Complete implementation reference for building the event-driven payment processing platform from scratch.
       Covers every service, every class, every table, and the exact order to build it all.
-      Based on patterns from your Mastercard and Axis Bank production systems.
+      Based on patterns from your Mastercard and Axis Bank production systems. No external CQRS framework — everything implemented manually with Spring Boot, Kafka, and PostgreSQL.
     </p>
     <div class="tech-stack">
       <span class="tech-pill tp-java">Java 17</span>
       <span class="tech-pill tp-spring">Spring Boot 3</span>
       <span class="tech-pill tp-kafka">Apache Kafka</span>
-      <span class="tech-pill tp-axon">Axon Framework</span>
+      <span class="tech-pill tp-spring">Manual CQRS</span>
       <span class="tech-pill tp-pg">PostgreSQL</span>
       <span class="tech-pill tp-docker">Docker Compose</span>
     </div>
@@ -528,7 +528,7 @@ nav {
           Command Side
         </div>
         <h3>Write Model (CQRS)</h3>
-        <p>All mutations go through commands handled by Axon aggregates. The aggregate enforces business invariants, emits domain events, and never reads its own query model. You'll implement this in <code>payment-service</code> using <code>@CommandHandler</code> and <code>@EventSourcingHandler</code> annotations.</p>
+        <p>All mutations go through plain Java command objects handled by Spring service classes. The command handler enforces business invariants, persists the payment state, and publishes domain events to the Outbox table. No framework annotations — this is manual CQRS in <code>payment-service</code>.</p>
       </div>
       <div class="idea-card">
         <div class="idea-card-icon" style="color:var(--query)">
@@ -552,7 +552,7 @@ nav {
           Failure Handling
         </div>
         <h3>Sagas + Compensating Transactions</h3>
-        <p>Distributed transactions are managed by Axon Sagas. If any step fails — risk rejection, insufficient funds, timeout — compensating commands undo the in-progress steps. This is the same pattern as your Axis Bank builder loan lifecycle stages.</p>
+        <p>Distributed transactions are managed by a manual Saga — a stateful Kafka consumer that tracks payment state in PostgreSQL. If any step fails — risk rejection, insufficient funds, timeout — it publishes compensating events. Same pattern as your Axis Bank loan lifecycle stages.</p>
       </div>
       <div class="idea-card">
         <div class="idea-card-icon" style="color:var(--outbox)">
@@ -595,7 +595,7 @@ nav {
         <div class="build-step-num" style="color:var(--build)">01</div>
         <div class="build-step-body">
           <div class="build-step-title">Docker Compose + Infrastructure</div>
-          <div class="build-step-desc">Set up the local infrastructure: Kafka (with Zookeeper), Axon Server, and three PostgreSQL instances (<code>payment_db:5432</code>, <code>account_db:5433</code>, <code>query_db:5434</code>). Verify all containers start with <code>docker compose up -d</code> and you can connect to each DB. Create a <code>docker-compose.yml</code> at the project root.</div>
+          <div class="build-step-desc">Set up the local infrastructure: Kafka (with Zookeeper) and three PostgreSQL instances (<code>payment_db:5432</code>, <code>account_db:5433</code>, <code>query_db:5434</code>). Verify all containers start with <code>docker compose up -d</code> and you can connect to each DB. Create a <code>docker-compose.yml</code> at the project root.</div>
           <span class="build-dep" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">NO DEPENDENCIES</span>
         </div>
       </div>
@@ -613,17 +613,17 @@ nav {
         <div class="build-step-num" style="color:var(--spring)">03</div>
         <div class="build-step-body">
           <div class="build-step-title">api-gateway — REST Entry Point</div>
-          <div class="build-step-desc">Your current gateway handles REST + validation + idempotency cache. <strong>Next step:</strong> Wire it to send <code>CreatePaymentCommand</code> to Axon's <code>CommandGateway</code> instead of just returning an empty response. The gateway should return <code>202 Accepted</code> with a payment ID. Add the <code>Repeat-Flag</code> / idempotency-key logic to actually return cached responses.</div>
-          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Axon Server running</span>
+          <div class="build-step-desc">Your current gateway handles REST + validation + idempotency cache. <strong>Next step:</strong> Wire it to publish a <code>CreatePaymentCommand</code> POJO to the <code>payment.commands</code> Kafka topic instead of returning an empty response. The gateway returns <code>202 Accepted</code> with a payment ID. Add Repeat-Flag idempotency-key logic to return cached responses.</div>
+          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Kafka running</span>
         </div>
       </div>
 
       <div class="build-step">
         <div class="build-step-num" style="color:var(--axon)">04</div>
         <div class="build-step-body">
-          <div class="build-step-title">payment-service — Axon Aggregate + CQRS + Outbox</div>
-          <div class="build-step-desc">The core write model. Implement <code>PaymentAggregate</code> with <code>@CommandHandler</code> for Create/Confirm/Cancel commands and <code>@EventSourcingHandler</code> for state mutation. Then implement the Outbox pattern: <code>outbox_events</code> table, <code>OutboxEntity</code>, <code>OutboxRepository</code>, a <code>@Scheduled</code> poller that reads unpublished rows and sends them to Kafka, then marks them published after ACK. <strong>This is the hardest service. Get it right.</strong></div>
-          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Axon Server, Kafka, PostgreSQL (payment_db)</span>
+          <div class="build-step-title">payment-service — Manual CQRS + Outbox</div>
+          <div class="build-step-desc">The core write model. Create a <code>PaymentCommandHandler</code> Spring service that consumes commands from the <code>payment.commands</code> Kafka topic, validates business rules, persists payment state to PostgreSQL, and writes domain events to an Outbox table in the same transaction. Then the Outbox relay publishes to Kafka: <code>outbox_events</code> table, <code>OutboxEntity</code>, <code>OutboxRepository</code>, a <code>@Scheduled</code> poller that reads unpublished rows and sends them to Kafka, then marks them published after ACK. <strong>This is the hardest service. Get it right.</strong></div>
+          <span class="build-dep" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">DEPENDS ON: common-service, Kafka, PostgreSQL (payment_db)</span>
         </div>
       </div>
 
@@ -648,9 +648,9 @@ nav {
       <div class="build-step">
         <div class="build-step-num" style="color:var(--saga)">07</div>
         <div class="build-step-body">
-          <div class="build-step-title">payment-saga-service — Saga Orchestrator</div>
-          <div class="build-step-desc">Axon Saga that listens for events from risk-service and account-service. If both succeed → sends <code>ConfirmPaymentCommand</code>. If either fails → sends <code>CancelPaymentCommand</code>. This is where compensating transactions happen. Use <code>@SagaEventHandler</code> and <code>@StartSaga</code> / <code>@EndSaga</code> annotations.</div>
-          <span class="build-dep" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">DEPENDS ON: common-service, Axon Server, risk-service + account-service publishing events</span>
+          <div class="build-step-title">payment-saga-service — Manual Saga Orchestrator</div>
+          <div class="build-step-desc">Manual Saga Orchestrator — a Kafka consumer that maintains a <code>saga_state</code> table in PostgreSQL tracking the status of each payment across steps. When both RiskApproved + AccountDebited events arrive → publishes ConfirmPaymentCommand to Kafka. If either fails → publishes CancelPaymentCommand. State machine logic in plain Java.</div>
+          <span class="build-dep" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">DEPENDS ON: common-service, Kafka, risk-service + account-service publishing events</span>
         </div>
       </div>
 
@@ -697,7 +697,7 @@ nav {
           <div class="flow-arrow" style="min-width:32px"></div>
           <div class="flow-box fb-gateway">API Gateway<br><span style="font-size:9px;opacity:.6">Spring Boot · :8080</span></div>
           <div class="flow-arrow" style="min-width:32px"></div>
-          <div class="flow-box fb-payment">Payment Service<br><span style="font-size:9px;opacity:.6">Axon · CQRS · Outbox · :8081</span></div>
+          <div class="flow-box fb-payment">Payment Service<br><span style="font-size:9px;opacity:.6">CQRS · Outbox · :8081</span></div>
         </div>
 
         <!-- Kafka bus -->
@@ -735,7 +735,7 @@ nav {
 
         <!-- Saga orchestrator note -->
         <div style="margin-top:20px;padding:12px 16px;border:1px dashed rgba(236,72,153,.3);border-radius:8px;background:rgba(236,72,153,.04);text-align:center">
-          <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--saga);letter-spacing:1.5px;text-transform:uppercase">Axon Saga Orchestrator · :8086</span>
+          <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--saga);letter-spacing:1.5px;text-transform:uppercase">Saga Orchestrator · :8086</span>
           <span style="font-size:11.5px;color:var(--muted);margin-left:12px">coordinates multi-step distributed transactions · issues compensating commands on failure</span>
         </div>
 
@@ -763,7 +763,7 @@ nav {
 
       <!-- Commands -->
       <div class="impl-box">
-        <div class="impl-box-title" style="color:var(--axon)"><span class="dot" style="background:var(--axon)"></span>Commands (common.command)</div>
+        <div class="impl-box-title" style="color:var(--axon)"><span class="dot" style="background:var(--axon)"></span>Commands (common.command) — Plain Java POJOs</div>
         <div class="code-block"><span class="kw">CreatePaymentCommand</span>
   paymentId: <span class="st">String</span> <span class="cm">// UUID generated by gateway</span>
   paymentReference: <span class="st">String</span> <span class="cm">// client-provided idempotency key</span>
@@ -779,7 +779,7 @@ nav {
   paymentId: <span class="st">String</span>
   reason: <span class="st">String</span> <span class="cm">// e.g. "INSUFFICIENT_FUNDS", "RISK_REJECTED"</span></div>
         <div class="alert-box alert-warn" style="margin-bottom:0">
-          <strong>Key:</strong> All commands must have <code>@TargetAggregateIdentifier</code> on <code>paymentId</code>. This is how Axon routes the command to the correct aggregate instance.
+          <strong>Key:</strong> Commands are plain POJOs with no framework annotations. Include a <code>paymentId</code> field on every command — the Saga uses this to correlate state in PostgreSQL.
         </div>
       </div>
 
@@ -852,10 +852,10 @@ nav {
     <ul class="checklist">
       <li>Expand <code>Status</code> enum to: INITIATED, RISK_APPROVED, RISK_REJECTED, DEBITED, DEBIT_FAILED, CONFIRMED, CANCELLED</li>
       <li>Create <code>common.command</code> package with <code>CreatePaymentCommand</code>, <code>ConfirmPaymentCommand</code>, <code>CancelPaymentCommand</code></li>
-      <li>Add <code>@TargetAggregateIdentifier</code> annotation on <code>paymentId</code> in each command</li>
+      <li>Include <code>paymentId</code> on each command and event so Kafka consumers can correlate processing state</li>
       <li>Create <code>common.event</code> package with all 7 events listed above</li>
       <li>All events must be serializable — use <code>@Data</code> or explicit getters, no-arg constructor</li>
-      <li>Add Axon dependency to common-service pom.xml: <code>axon-spring-boot-starter</code></li>
+      <li>No Axon dependency needed. common-service only contains plain POJOs, shared DTOs, and event classes.</li>
       <li>Verify <code>mvn clean install</code> succeeds and other modules can import it</li>
     </ul>
 
@@ -884,28 +884,27 @@ nav {
           <div class="svc-accent" style="background:var(--spring)"></div>
         </div>
         <div class="svc-body">
-          <p class="svc-desc">Single external entry point. Validates input, checks idempotency key (returns cached response if duplicate), and forwards <code>CreatePaymentCommand</code> to Payment Service via Axon's <code>CommandGateway</code>. Returns <code>202 Accepted</code> with payment ID for async polling. <strong>No business logic lives here.</strong></p>
+          <p class="svc-desc">Single external entry point. Validates input, checks idempotency key (returns cached response if duplicate), and publishes <code>CreatePaymentCommand</code> to the <code>payment.commands</code> Kafka topic. Returns <code>202 Accepted</code> with payment ID for async polling. <strong>No business logic lives here.</strong></p>
 
           <div class="alert-box alert-success">
-            <strong>Current state:</strong> You already have the controller, request DTOs, currency validation, and tiered cache (Caffeine → Redis → DB). <strong>What's missing:</strong> Actually sending the command to Axon and returning the payment ID.
+            <strong>Current state:</strong> You already have the controller, request DTOs, currency validation, and tiered cache (Caffeine → Redis → DB). <strong>What's missing:</strong> Serializing the command as JSON and publishing it to the <code>payment.commands</code> Kafka topic, then returning the payment ID.
           </div>
 
           <div class="svc-section-hdr">Package Structure</div>
           <div class="code-block"><span class="pk">com.suresh.paymentsimulator.gateway</span>
 ├── controller/
-│   └── <span class="st">PaymentInitiatorController</span> <span class="cm">// ✅ exists — needs CommandGateway wiring</span>
+│   └── <span class="st">PaymentInitiatorController</span> <span class="cm">// ✅ exists — wire service call into controller</span>
 ├── request/
 │   └── <span class="st">InitiatePaymentRequest</span>     <span class="cm">// ✅ exists</span>
 ├── response/
 │   └── <span class="st">InitiatePaymentResponse</span>    <span class="cm">// ✅ exists — add paymentId field</span>
 ├── config/
-│   ├── <span class="st">DatabaseConfig</span>             <span class="cm">// ✅ exists</span>
-│   ├── <span class="st">RedisConfig</span>                <span class="cm">// ✅ exists</span>
-│   ├── <span class="st">TieredCacheConfig</span>          <span class="cm">// ✅ exists</span>
-│   └── <span class="kw">AxonConfig</span>                 <span class="cm">// NEW — configure CommandGateway</span>
+│   ├── <span class="st">RedisConnectionConfig</span>    <span class="cm">// Redis connection settings</span>
+│   ├── <span class="st">LocalCache</span>                <span class="cm">// Caffeine local cache</span>
+│   └── <span class="st">TransactionTieredCacheConfig</span> <span class="cm">// Transaction cache lookup</span>
 ├── service/
 │   ├── <span class="st">TransactionCacheService</span>    <span class="cm">// ✅ exists</span>
-│   └── <span class="kw">PaymentCommandService</span>      <span class="cm">// NEW — wraps CommandGateway.send()</span>
+│   └── <span class="st">PaymentInitiatorServiceImpl</span> <span class="cm">// persists and retrieves transactions</span>
 ├── validators/
 │   ├── <span class="st">ValidCurrency</span>              <span class="cm">// ✅ exists</span>
 │   └── <span class="st">CurrencyValidatorImpl</span>      <span class="cm">// ✅ exists</span>
@@ -916,11 +915,11 @@ nav {
 
           <div class="svc-section-hdr">What To Implement</div>
           <ul class="svc-items">
-            <li>Inject Axon's <code>CommandGateway</code> into the controller (or a new <code>PaymentCommandService</code>)</li>
-            <li>In <code>initiatePayment()</code>: generate UUID → build <code>CreatePaymentCommand</code> → call <code>commandGateway.sendAndWait()</code></li>
+            <li>Inject <code>KafkaTemplate</code> into the controller (or a new <code>PaymentCommandService</code>)</li>
+            <li>In <code>initiatePayment()</code>: call the service, then return its mapped transaction response</li>
             <li>Return <code>202 Accepted</code> with the <code>paymentId</code> in the response body</li>
             <li>Fix the <code>Repeat-Flag</code> logic: if idempotency key already exists in cache → return the cached response with the original <code>paymentId</code> instead of processing again</li>
-            <li>Add <code>@RestControllerAdvice</code> global exception handler for validation errors, Axon exceptions, timeout, etc.</li>
+            <li>Add <code>@RestControllerAdvice</code> global exception handler for validation errors, Kafka exceptions, timeout, etc.</li>
             <li>Add request logging with correlation ID header (<code>X-Correlation-Id</code>)</li>
           </ul>
 
@@ -964,26 +963,26 @@ spring-boot-starter-web
 spring-boot-starter-validation
 spring-boot-starter-data-jpa
 spring-boot-starter-data-redis
-<span class="kw">axon-spring-boot-starter</span>         <span class="cm">// NEW — for CommandGateway</span>
+<span class="kw">spring-kafka</span>                      <span class="cm">// for KafkaTemplate command publishing</span>
 <span class="kw">spring-boot-starter-actuator</span>      <span class="cm">// health checks</span>
 common-service                     <span class="cm">// your shared module</span></div>
 
           <div class="svc-section-hdr">Build Checklist</div>
           <ul class="checklist">
-            <li>Add Axon dependency to pom.xml</li>
-            <li>Create <code>PaymentCommandService</code> wrapping <code>CommandGateway</code></li>
+            <li>Add spring-kafka dependency to pom.xml (likely already present)</li>
+            <li>Wire the existing <code>PaymentInitiatorService</code> into the controller and return its response</li>
             <li>Wire controller → generate UUID → send command → return 202 with paymentId</li>
             <li>Fix idempotency: cache lookup before command dispatch, return cached response if found</li>
             <li>Add <code>GlobalExceptionHandler</code> with proper error responses</li>
-            <li>Add <code>InitiatePaymentResponse.paymentId</code> field</li>
-            <li>Test: POST → returns 202 + paymentId. Duplicate POST → returns same paymentId</li>
+            <li>Verify the response contains the persisted transaction ID</li>
+            <li>Verify repeat requests return the existing transaction and payment ID from the tiered cache</li>
           </ul>
 
           <div class="svc-tags">
             <span class="svc-tag" style="color:var(--spring);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)">Spring Boot</span>
             <span class="svc-tag" style="color:#818cf8;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.06)">Bean Validation</span>
             <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Idempotency Cache</span>
-            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">CommandGateway</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">KafkaTemplate</span>
           </div>
         </div>
       </div>
@@ -999,7 +998,7 @@ common-service                     <span class="cm">// your shared module</span>
           <div class="svc-accent" style="background:var(--axon)"></div>
         </div>
         <div class="svc-body">
-          <p class="svc-desc">The heart of the system. Manages the <code>PaymentAggregate</code> via Axon. All state changes produce domain events persisted to Axon's event store. The Outbox relay handles publishing to Kafka without dual-write risk. <strong>This is the most complex service — take your time.</strong></p>
+          <p class="svc-desc">The heart of the system. A Kafka consumer listening to <code>payment.commands</code>. Validates business rules, persists payment state to PostgreSQL, and writes domain events to an <code>outbox_events</code> table in the same ACID transaction. The Outbox relay publishes to Kafka. <strong>This is the most complex service — take your time.</strong></p>
 
           <div class="svc-section-hdr">Package Structure</div>
           <div class="code-block"><span class="pk">com.suresh.paymentsimulator.payment</span>
@@ -1013,32 +1012,27 @@ common-service                     <span class="cm">// your shared module</span>
 │   ├── <span class="kw">OutboxEvent</span>                <span class="cm">// @Entity — maps to outbox_events table</span>
 │   ├── <span class="kw">OutboxRepository</span>           <span class="cm">// JpaRepository&lt;OutboxEvent, Long&gt;</span>
 │   ├── <span class="kw">OutboxRelay</span>                <span class="cm">// @Scheduled — polls unpublished, sends to Kafka</span>
-│   └── <span class="kw">OutboxEventListener</span>        <span class="cm">// listens to Axon events, writes outbox rows</span>
+│   └── <span class="kw">OutboxEventPublisher</span>        <span class="cm">// @Scheduled poller — reads outbox, publishes to Kafka</span>
 ├── config/
-│   ├── <span class="kw">AxonConfig</span>                 <span class="cm">// Axon Server connection + event store config</span>
+│   ├── <span class="kw">KafkaConsumerConfig</span>         <span class="cm">// Kafka consumer for payment.commands topic</span>
 │   └── <span class="kw">KafkaProducerConfig</span>        <span class="cm">// idempotent producer, transactional.id</span>
 └── <span class="st">PaymentServiceApplication</span>     <span class="cm">// @SpringBootApplication</span></div>
 
-          <div class="svc-section-hdr">PaymentAggregate — The Core Class</div>
-          <div class="code-block"><span class="kw">@Aggregate</span>
-public class PaymentAggregate {
+          <div class="svc-section-hdr">Manual Command Handler — Core Write Path</div>
+          <div class="code-block">// Spring @Service + @KafkaListener for payment.commands
+public class PaymentCommandHandler {
 
-    <span class="kw">@AggregateIdentifier</span>
     private <span class="st">String</span> paymentId;
     private <span class="st">String</span> paymentReference;
     private <span class="st">BigDecimal</span> amount;
     private <span class="st">String</span> currency;
     private <span class="st">Status</span> status;
 
-    <span class="cm">// No-arg constructor required by Axon</span>
-    protected PaymentAggregate() {}
-
-    <span class="cm">// ── Command Handlers ──</span>
-
-    <span class="kw">@CommandHandler</span>
-    public PaymentAggregate(<span class="ev">CreatePaymentCommand</span> cmd) {
+    <span class="cm">// @KafkaListener receives CreatePaymentCommand</span>
+    public void handle(<span class="ev">CreatePaymentCommand</span> cmd) {
         <span class="cm">// Validate invariants here</span>
-        AggregateLifecycle.apply(new <span class="ev">PaymentInitiatedEvent</span>(
+        <span class="cm">// Persist payment + outbox event atomically.</span>
+        outboxRepository.save(new <span class="ev">PaymentInitiatedEvent</span>(
             cmd.getPaymentId(),
             cmd.getPaymentReference(),
             cmd.getAmount(),
@@ -1049,23 +1043,20 @@ public class PaymentAggregate {
         ));
     }
 
-    <span class="kw">@CommandHandler</span>
     public void handle(<span class="ev">ConfirmPaymentCommand</span> cmd) {
         <span class="st">if</span> (this.status != Status.DEBITED)
             <span class="st">throw new</span> IllegalStateException(<span class="st">"Cannot confirm"</span>);
-        AggregateLifecycle.apply(new <span class="ev">PaymentConfirmedEvent</span>(...));
+        outboxRepository.save(new <span class="ev">PaymentConfirmedEvent</span>(...));
     }
 
-    <span class="kw">@CommandHandler</span>
     public void handle(<span class="ev">CancelPaymentCommand</span> cmd) {
-        AggregateLifecycle.apply(new <span class="ev">PaymentCancelledEvent</span>(
+        outboxRepository.save(new <span class="ev">PaymentCancelledEvent</span>(
             cmd.getPaymentId(), cmd.getReason(), Instant.now()
         ));
     }
 
-    <span class="cm">// ── Event Sourcing Handlers (mutate state from events) ──</span>
+    <span class="cm">// Update persisted payment state in the same transaction</span>
 
-    <span class="kw">@EventSourcingHandler</span>
     public void on(<span class="ev">PaymentInitiatedEvent</span> e) {
         this.paymentId = e.getPaymentId();
         this.status = Status.INITIATED;
@@ -1073,12 +1064,10 @@ public class PaymentAggregate {
         <span class="cm">// ... set all fields</span>
     }
 
-    <span class="kw">@EventSourcingHandler</span>
     public void on(<span class="ev">PaymentConfirmedEvent</span> e) {
         this.status = Status.CONFIRMED;
     }
 
-    <span class="kw">@EventSourcingHandler</span>
     public void on(<span class="ev">PaymentCancelledEvent</span> e) {
         this.status = Status.CANCELLED;
     }
@@ -1098,10 +1087,9 @@ public class OutboxEvent {
     private <span class="st">Instant</span> publishedAt;
 }
 
-<span class="cm">// 2. OutboxEventListener — writes outbox row when aggregate emits event</span>
+<span class="cm">// Write the outbox row directly in the command handler transaction</span>
 <span class="kw">@Component</span>
-public class OutboxEventListener {
-    <span class="kw">@EventHandler</span>
+public class OutboxEventWriter {
     public void on(<span class="ev">PaymentInitiatedEvent</span> event) {
         OutboxEvent outbox = new OutboxEvent();
         outbox.setAggregateId(event.getPaymentId());
@@ -1110,7 +1098,7 @@ public class OutboxEventListener {
         outbox.setPublished(false);
         outbox.setCreatedAt(Instant.now());
         outboxRepository.save(outbox);
-        <span class="cm">// This runs in SAME transaction as Axon's event store write</span>
+        <span class="cm">// This runs in SAME @Transactional as payment state persistence</span>
     }
 }
 
@@ -1135,7 +1123,7 @@ public class OutboxRelay {
 }</div>
 
           <div class="svc-section-hdr">Database — payment_db (:5432)</div>
-          <div class="code-block"><span class="cm">-- Axon manages the event store tables automatically</span>
+          <div class="code-block"><span class="cm">-- Manual schema: you own the event store</span>
 <span class="cm">-- You only need to create the outbox table:</span>
 
 <span class="kw">CREATE TABLE</span> outbox_events (
@@ -1160,7 +1148,7 @@ public class OutboxRelay {
           <div class="svc-section-hdr">Key Maven Dependencies</div>
           <div class="code-block">spring-boot-starter-web
 spring-boot-starter-data-jpa
-<span class="kw">axon-spring-boot-starter</span>
+<span class="kw">spring-kafka</span>
 <span class="kw">spring-kafka</span>
 postgresql <span class="cm">// runtime</span>
 jackson-databind <span class="cm">// JSON serialization for outbox payload</span>
@@ -1189,25 +1177,23 @@ spring:
         acks: <span class="st">all</span>
         max.in.flight.requests.per.connection: <span class="st">5</span>
 
-axon:
-  axonserver:
-    servers: localhost:8124</div>
+# No Axon config — manual CQRS via Kafka</div>
 
           <div class="svc-section-hdr">Build Checklist</div>
           <ul class="checklist">
-            <li>Create <code>PaymentAggregate</code> with <code>@Aggregate</code>, <code>@AggregateIdentifier</code></li>
-            <li>Implement <code>@CommandHandler</code> for Create, Confirm, Cancel</li>
-            <li>Implement <code>@EventSourcingHandler</code> for all 3 events</li>
+            <li>Create <code>PaymentCommandHandler</code> — a <code>@Service</code> + <code>@KafkaListener</code> on <code>payment.commands</code> topic</li>
+            <li>Implement command handling for Create, Confirm, Cancel — persist state to <code>payments</code> table</li>
+            <li>Create <code>PaymentState</code> entity/enum tracking INITIATED → RISK_APPROVED → CONFIRMED / CANCELLED</li>
             <li>Create <code>outbox_events</code> table and <code>OutboxEvent</code> entity</li>
-            <li>Create <code>OutboxEventListener</code> — writes outbox row on each event</li>
+            <li>Within the same <code>@Transactional</code>, write to <code>outbox_events</code> table after persisting payment state</li>
             <li>Create <code>OutboxRelay</code> — <code>@Scheduled</code> poller, publishes to Kafka, marks published after ACK</li>
             <li>Configure idempotent Kafka producer in application.yml</li>
-            <li>Test: send <code>CreatePaymentCommand</code> via gateway → verify event in Axon event store + Kafka topic</li>
+            <li>Test: POST to gateway → verify command consumed by payment-service → verify event in outbox table + published to Kafka topic</li>
             <li>Test: verify outbox row is marked published = true after Kafka ACK</li>
           </ul>
 
           <div class="svc-tags">
-            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">Axon Framework</span>
+            <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Manual CQRS</span>
             <span class="svc-tag" style="color:var(--outbox);border-color:rgba(20,184,166,.3);background:rgba(20,184,166,.06)">Outbox Pattern</span>
             <span class="svc-tag" style="color:var(--event);border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.06)">Event Sourcing</span>
             <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">Kafka Producer</span>
@@ -1466,44 +1452,39 @@ public void consume(<span class="ev">PaymentInitiatedEvent</span> event) {
           <div class="svc-accent" style="background:var(--saga)"></div>
         </div>
         <div class="svc-body">
-          <p class="svc-desc">Axon Saga that coordinates the multi-step payment flow. Listens for events from risk-service and account-service. If both succeed → sends <code>ConfirmPaymentCommand</code>. If either fails → sends <code>CancelPaymentCommand</code> to trigger compensation.</p>
+          <p class="svc-desc">Manual Saga that coordinates the multi-step payment flow. A Kafka consumer tracking state in a <code>saga_state</code> PostgreSQL table. If both RiskApproved + AccountDebited events arrive → publishes ConfirmPaymentCommand to Kafka. If either fails → publishes CancelPaymentCommand.</p>
 
           <div class="svc-section-hdr">Package Structure</div>
           <div class="code-block"><span class="pk">com.suresh.paymentsimulator.saga</span>
-├── <span class="kw">PaymentSaga</span>                    <span class="cm">// THE Saga class — all logic here</span>
+├── <span class="kw">PaymentSaga</span>                    <span class="cm">// Kafka consumer + state transitions</span>
 ├── config/
-│   └── <span class="kw">AxonConfig</span>                 <span class="cm">// Axon Server connection</span>
+│   └── <span class="kw">SagaStateRepository</span>         <span class="cm">// JPA repo for saga_state table</span>
 └── <span class="st">SagaServiceApplication</span></div>
 
-          <div class="svc-section-hdr">PaymentSaga — The Complete Class</div>
+          <div class="svc-section-hdr">Saga State Machine — Processing Outline</div>
           <div class="code-block">public class <span class="kw">PaymentSaga</span> {
 
-    <span class="cm">// Transient — injected by Axon, not serialized</span>
-    <span class="kw">@Autowired</span>
-    private transient <span class="st">CommandGateway</span> commandGateway;
-
-    <span class="cm">// Saga state — serialized between events</span>
+    <span class="cm">// Load/update this state in PostgreSQL for each paymentId</span>
     private <span class="st">String</span> paymentId;
     private <span class="st">boolean</span> riskApproved = false;
     private <span class="st">boolean</span> accountDebited = false;
 
     <span class="cm">// ── STARTED by PaymentInitiatedEvent ──</span>
-    <span class="kw">@StartSaga</span>
-    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    <span class="kw">@KafkaListener</span>(topics = "payment.events")
     public void on(<span class="ev">PaymentInitiatedEvent</span> event) {
         this.paymentId = event.getPaymentId();
         <span class="cm">// Just record — wait for risk + account results</span>
     }
 
     <span class="cm">// ── Risk approved ──</span>
-    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    <span class="kw">@KafkaListener</span>(topics = {"risk.events", "account.events"})
     public void on(<span class="ev">RiskApprovedEvent</span> event) {
         this.riskApproved = true;
         tryConfirm();
     }
 
     <span class="cm">// ── Account debited ──</span>
-    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    <span class="kw">@KafkaListener</span>(topics = {"risk.events", "account.events"})
     public void on(<span class="ev">AccountDebitedEvent</span> event) {
         this.accountDebited = true;
         tryConfirm();
@@ -1512,46 +1493,43 @@ public void consume(<span class="ev">PaymentInitiatedEvent</span> event) {
     <span class="cm">// ── BOTH succeeded → confirm payment ──</span>
     private void tryConfirm() {
         <span class="st">if</span> (riskApproved && accountDebited) {
-            commandGateway.send(new <span class="ev">ConfirmPaymentCommand</span>(paymentId));
-            <span class="kw">SagaLifecycle.end()</span>;
+            kafkaTemplate.send("payment.commands", new <span class="ev">ConfirmPaymentCommand</span>(paymentId));
         }
     }
 
     <span class="cm">// ── Risk rejected → cancel payment ──</span>
-    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    <span class="kw">@KafkaListener</span>(topics = {"risk.events", "account.events"})
     public void on(<span class="ev">RiskRejectedEvent</span> event) {
-        commandGateway.send(new <span class="ev">CancelPaymentCommand</span>(
+        kafkaTemplate.send("payment.commands", new <span class="ev">CancelPaymentCommand</span>(
             paymentId, "RISK_REJECTED: " + event.getReason()));
-        <span class="kw">SagaLifecycle.end()</span>;
     }
 
     <span class="cm">// ── Account debit failed → cancel payment ──</span>
-    <span class="kw">@SagaEventHandler</span>(associationProperty = "paymentId")
+    <span class="kw">@KafkaListener</span>(topics = {"risk.events", "account.events"})
     public void on(<span class="ev">AccountDebitFailedEvent</span> event) {
-        commandGateway.send(new <span class="ev">CancelPaymentCommand</span>(
+        kafkaTemplate.send("payment.commands", new <span class="ev">CancelPaymentCommand</span>(
             paymentId, "INSUFFICIENT_FUNDS"));
-        <span class="kw">SagaLifecycle.end()</span>;
     }
 }</div>
 
           <div class="alert-box alert-warn">
-            <strong>Key detail:</strong> <code>associationProperty = "paymentId"</code> is how Axon routes events to the correct Saga instance. Every event class MUST have a <code>getPaymentId()</code> method. Axon uses this to find the Saga instance that's tracking that specific payment.
+            <strong>Key detail:</strong> Every event must carry a <code>paymentId</code>. The Saga consumer uses this to load the matching row from <code>saga_state</code> table and update its status accordingly. This is how you correlate distributed steps without a framework.
           </div>
 
           <div class="svc-section-hdr">Build Checklist</div>
           <ul class="checklist">
-            <li>Create Spring Boot app on port 8086 with Axon dependency</li>
-            <li>Create <code>PaymentSaga</code> class with all 5 event handlers</li>
-            <li>Verify <code>@StartSaga</code> on <code>PaymentInitiatedEvent</code></li>
-            <li>Verify <code>SagaLifecycle.end()</code> is called on both success and failure paths</li>
+            <li>Create Spring Boot app on port 8086 with spring-kafka and spring-data-jpa dependencies</li>
+            <li>Create a Kafka consumer and persist saga state by <code>paymentId</code></li>
+            <li>Confirm only after both risk approval and account debit have succeeded</li>
+            <li>Publish a cancel command on either failure and make event handling idempotent</li>
             <li>Test happy path: initiated → risk approved → debited → ConfirmPaymentCommand sent</li>
             <li>Test failure: initiated → risk approved → debit failed → CancelPaymentCommand sent</li>
             <li>Test failure: initiated → risk rejected → CancelPaymentCommand sent immediately</li>
           </ul>
 
           <div class="svc-tags">
-            <span class="svc-tag" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">Axon Saga</span>
-            <span class="svc-tag" style="color:var(--axon);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">CommandGateway</span>
+            <span class="svc-tag" style="color:var(--saga);border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.06)">Manual Saga</span>
+            <span class="svc-tag" style="color:var(--kafka);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.06)">KafkaTemplate</span>
             <span class="svc-tag" style="color:var(--event);border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.06)">Compensation</span>
           </div>
         </div>
@@ -1750,7 +1728,7 @@ public DefaultErrorHandler errorHandler(KafkaTemplate&lt;String, String&gt; temp
         </div>
         <ul class="path-steps">
           <li class="path-step"><span class="path-step-n">1</span><span>Client sends <code>POST /payments/initiate</code> with idempotency key</span><span class="path-event pe-happy">REST</span></li>
-          <li class="path-step"><span class="path-step-n">2</span><span>Gateway validates, issues <code>CreatePaymentCommand</code> to Axon</span><span class="path-event pe-happy">CMD</span></li>
+          <li class="path-step"><span class="path-step-n">2</span><span>Gateway validates, publishes <code>CreatePaymentCommand</code> to <code>payment.commands</code> Kafka topic</span><span class="path-event pe-happy">CMD</span></li>
           <li class="path-step"><span class="path-step-n">3</span><span>PaymentAggregate emits <code>PaymentInitiatedEvent</code> to event store + outbox</span><span class="path-event pe-happy">EVENT</span></li>
           <li class="path-step"><span class="path-step-n">4</span><span>Outbox relay publishes event to <code>payment.events</code> Kafka topic</span><span class="path-event pe-happy">KAFKA</span></li>
           <li class="path-step"><span class="path-step-n">5</span><span>Risk Service consumes, runs rules, emits <code>RiskApprovedEvent</code></span><span class="path-event pe-happy">RISK ✓</span></li>
@@ -1805,7 +1783,7 @@ public DefaultErrorHandler errorHandler(KafkaTemplate&lt;String, String&gt; temp
 
       <div class="pat-card">
         <div class="pat-name" style="color:var(--saga)"><span class="pat-dot" style="background:var(--saga)"></span>Saga (Orchestration)</div>
-        <p class="pat-desc"><strong>Problem:</strong> Payment spans risk + account + notification. No distributed transaction. If account fails after risk approves, need rollback. <strong>Solution:</strong> Axon Saga tracks state. On failure → issues CancelPaymentCommand. <strong>Your example:</strong> "Saga watches for both RiskApprovedEvent and AccountDebitedEvent. Only when both arrive does it confirm. If either fails, it compensates."</p>
+        <p class="pat-desc"><strong>Problem:</strong> Payment spans risk + account + notification. No distributed transaction. If account fails after risk approves, need rollback. <strong>Solution:</strong> Manual Saga tracks state in PostgreSQL. On failure → publishes CancelPaymentCommand to Kafka. <strong>Your example:</strong> "Saga watches for both RiskApprovedEvent and AccountDebitedEvent. Only when both arrive does it confirm. If either fails, it compensates."</p>
       </div>
 
       <div class="pat-card">
@@ -1815,7 +1793,7 @@ public DefaultErrorHandler errorHandler(KafkaTemplate&lt;String, String&gt; temp
 
       <div class="pat-card">
         <div class="pat-name" style="color:var(--axon)"><span class="pat-dot" style="background:var(--axon)"></span>CQRS</div>
-        <p class="pat-desc"><strong>Problem:</strong> Write model (transactional integrity) vs read model (fast queries) have different requirements. Sharing a model = neither is optimized. <strong>Solution:</strong> Commands go to Axon Aggregate. Queries hit denormalized PostgreSQL projections. <strong>Your example:</strong> "Query Service has zero joins — payment_summary is fully denormalized. Write throughput and read latency are independently scalable."</p>
+        <p class="pat-desc"><strong>Problem:</strong> Write model (transactional integrity) vs read model (fast queries) have different requirements. Sharing a model = neither is optimized. <strong>Solution:</strong> Commands are consumed by a Spring service (CommandHandler). It persists state and writes to the Outbox. Queries hit denormalized PostgreSQL projections via query-service. <strong>Your example:</strong> "Query Service has zero joins — payment_summary is fully denormalized. Write throughput and read latency are independently scalable."</p>
       </div>
 
       <div class="pat-card">
@@ -1869,12 +1847,12 @@ public DefaultErrorHandler errorHandler(KafkaTemplate&lt;String, String&gt; temp
       <div class="impl-box">
         <div class="impl-box-title" style="color:var(--spring)"><span class="dot" style="background:var(--spring)"></span>Unit Tests</div>
         <ul class="svc-items">
-          <li>Aggregate command handlers — use Axon's <code>AggregateTestFixture</code></li>
+          <li>Command handlers — test with standard Spring Boot + Mockito unit tests</li>
           <li>Risk rules — each rule tested independently with edge cases</li>
           <li>Service layer — Mockito mocks for repositories</li>
           <li>Request validation — test bean validation annotations</li>
         </ul>
-        <div class="code-block"><span class="cm">// Axon AggregateTestFixture example</span>
+        <div class="code-block"><span class="cm">// CommandHandler unit test example (Mockito)</span>
 fixture.givenNoPriorActivity()
     .when(new <span class="ev">CreatePaymentCommand</span>(paymentId, ...))
     .expectEvents(new <span class="ev">PaymentInitiatedEvent</span>(paymentId, ...));
@@ -1953,8 +1931,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
 
-  <span class="kw">axon-server</span>:
-    image: axoniq/axonserver:2024.1.2
+  # axon-server removed — not needed for manual CQRS
     ports:
       - "<span class="hl">8024</span>:8024"   <span class="cm"># Dashboard</span>
       - "<span class="hl">8124</span>:8124"   <span class="cm"># gRPC</span>
@@ -1984,7 +1961,7 @@ services:
       POSTGRES_PASSWORD: postgres</div>
 
     <div class="alert-box alert-success" style="margin-top:16px">
-      <strong>Verify:</strong> Run <code>docker compose up -d</code>, then check: (1) <code>localhost:8024</code> for Axon Server dashboard, (2) <code>psql -h localhost -p 5432 -U postgres -d payment_db</code> connects, (3) Kafka is reachable on 9092. All 6 containers must be healthy before you start building services.
+      <strong>Verify:</strong> Run <code>docker compose up -d</code>, then check: (1) <code>psql -h localhost -p 5432 -U postgres -d payment_db</code> connects, (2) Kafka is reachable on 9092. All containers must be healthy before you start building services.
     </div>
 
     <div style="margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 22px;">
